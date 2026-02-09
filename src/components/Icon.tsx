@@ -1,7 +1,6 @@
-import React from 'react';
-import { 
-  Leaf, Users, Layers, Sun, Home, Box, Search, 
-  ChevronRight, ChevronDown, Plus, Trash2, Copy, 
+import {
+  Leaf, Users, Layers, Sun, Home, Box, Search,
+  ChevronRight, ChevronDown, Plus, Trash2, Copy,
   Save, Wand2, Image as ImageIcon, Upload, X,
   MoreVertical, RefreshCw, Star, Clock, LayoutGrid,
   PlusCircle, FileText, Eraser, Check, Settings, Edit2,
