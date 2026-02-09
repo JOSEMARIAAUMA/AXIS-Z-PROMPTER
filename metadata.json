@@ -1,0 +1,8 @@
+{
+  "name": "AXIS-Z GESTOR PROMPTS",
+  "description": "Repositorio profesional de prompts para visualización arquitectónica residencial en Andalucía, con asistente IA integrado.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
