@@ -431,17 +431,26 @@ function App() {
           onResizeStart={startResize('left')}
           className="z-30"
           headerActions={
-            <div className="relative">
-              <select
-                value={currentArea}
-                onChange={handleAreaChange}
-                className="appearance-none bg-arch-900 border border-arch-700 text-xs text-white font-bold uppercase rounded-md py-1 pl-2 pr-6 focus:outline-none focus:border-accent-500 cursor-pointer hover:bg-arch-800 transition-colors"
+            <div className="flex items-center space-x-2">
+              <a
+                href="https://portal.axiszgpi.com"
+                className="p-1.5 text-arch-400 hover:text-white hover:bg-arch-800 rounded-md transition-colors"
+                title="Volver al Portal"
               >
-                {AREAS.map(area => (
-                  <option key={area.id} value={area.id}>{area.label}</option>
-                ))}
-              </select>
-              <Icons.ChevronDown size={12} className="absolute right-2 top-2 pointer-events-none text-arch-400" />
+                <Icons.LayoutGrid size={16} />
+              </a>
+              <div className="relative">
+                <select
+                  value={currentArea}
+                  onChange={handleAreaChange}
+                  className="appearance-none bg-arch-900 border border-arch-700 text-xs text-white font-bold uppercase rounded-md py-1 pl-2 pr-6 focus:outline-none focus:border-accent-500 cursor-pointer hover:bg-arch-800 transition-colors"
+                >
+                  {AREAS.map(area => (
+                    <option key={area.id} value={area.id}>{area.label}</option>
+                  ))}
+                </select>
+                <Icons.ChevronDown size={12} className="absolute right-2 top-2 pointer-events-none text-arch-400" />
+              </div>
             </div>
           }
         >
@@ -508,8 +517,8 @@ function App() {
             <button
               onClick={() => setRightTab('COMPILER')}
               className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wide transition-colors flex items-center justify-center space-x-2 ${rightTab === 'COMPILER'
-                  ? 'bg-arch-900 text-white border-b-2 border-accent-500'
-                  : 'text-arch-500 hover:text-arch-300 hover:bg-arch-900/50'
+                ? 'bg-arch-900 text-white border-b-2 border-accent-500'
+                : 'text-arch-500 hover:text-arch-300 hover:bg-arch-900/50'
                 }`}
             >
               <Icons.FileText size={14} />
@@ -518,8 +527,8 @@ function App() {
             <button
               onClick={() => setRightTab('REFERENCES')}
               className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wide transition-colors flex items-center justify-center space-x-2 ${rightTab === 'REFERENCES'
-                  ? 'bg-arch-900 text-white border-b-2 border-accent-500'
-                  : 'text-arch-500 hover:text-arch-300 hover:bg-arch-900/50'
+                ? 'bg-arch-900 text-white border-b-2 border-accent-500'
+                : 'text-arch-500 hover:text-arch-300 hover:bg-arch-900/50'
                 }`}
             >
               <Icons.Image size={14} />
