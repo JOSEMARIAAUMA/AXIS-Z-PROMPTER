@@ -88,7 +88,27 @@ export const AREA_CONFIG: Record<AreaType, any> = {
   },
   IMAGE: APP_CONFIG_BASE.IMAGE,
   TEXT: APP_CONFIG_BASE.TEXT,
-  CODE: APP_CONFIG_BASE.CODE
+  CODE: APP_CONFIG_BASE.CODE,
+  MARKETING_PRODUCTIVIDAD: {
+    apps: [
+      'ChatGPT 4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro',
+      'Perplexity', 'Copy.ai', 'Jasper', 'Canva AI'
+    ],
+    compiler: {
+      system: { label: "System / Rol de Experto", placeholder: "Ej: Actúa como un Director de Marketing especializado en Real Estate..." },
+      role: { label: "Tipo de Contenido", placeholder: "Email de ventas, Post de Instagram, Análisis de competencia..." },
+      subject: { label: "Producto / Proyecto", placeholder: "Promoción de viviendas de lujo en Marbella, lanzamiento de nueva fase..." },
+      context: { label: "Audiencia / Mercado", placeholder: "Inversores institucionales, compradores finales, agentes inmobiliarios..." },
+      details: { label: "Detalles del Mensaje", placeholder: "USPs del proyecto, llamada a la acción, propuesta de valor..." },
+      negative: { label: "Restricciones / A evitar", placeholder: "No usar promesas de rentabilidad, evitar lenguaje alarmista..." },
+      params: { label: "Formato de Salida", placeholder: "Markdown, JSON, máximo 280 caracteres, tono formal" }
+    },
+    defaultTemplate: {
+      role: "Professional Real Estate Marketing, Data-driven Strategy",
+      negative: "misleading claims, aggressive tone, jargon, passive voice",
+      params: "Format: Markdown, Language: Spanish"
+    }
+  }
 };
 
 export const DEFAULT_APPS = AREA_CONFIG.IMAGE.apps; // Fallback

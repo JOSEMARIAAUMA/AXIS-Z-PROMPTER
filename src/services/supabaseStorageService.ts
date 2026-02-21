@@ -28,7 +28,9 @@ export const getPrompts = async (): Promise<PromptItem[]> => {
         apps: p.apps || [],
         area: p.area || 'IMAGE',
         isFavorite: p.is_favorite,
-        lastModified: parseInt(p.last_modified)
+        lastModified: parseInt(p.last_modified),
+        origin: p.origin as 'user' | 'internet' | undefined,
+        rating: p.rating ? Number(p.rating) : undefined,
     }));
 };
 

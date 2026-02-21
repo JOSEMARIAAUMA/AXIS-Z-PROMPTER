@@ -73,6 +73,7 @@ export interface FilterState {
   subcategory: string | 'All';
   app: string | 'All'; // New: App Filter
   rating?: number; // New: Min Rating Filter (0-5)
+  origin: 'user' | 'internet' | 'All'; // New: Origin Filter
 }
 
 export type DragItemType = 'IMAGE' | 'TEXT';

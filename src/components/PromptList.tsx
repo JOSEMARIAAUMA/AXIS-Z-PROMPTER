@@ -33,8 +33,8 @@ export const PromptList: React.FC<PromptListProps> = ({
 
   const [viewMode, setViewMode] = useState<ViewMode>('LIBRARY');
   const [repoMode, setRepoMode] = useState<RepoMode>('SNIPPETS');
-  const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
+  const [hoveredDropdown, setHoveredDropdown] = useState<'category' | 'subcategory' | null>(null);
 
   // 1. First, filter EVERYTHING by the Current Area
   const areaPrompts = useMemo(() => {
@@ -62,6 +62,34 @@ export const PromptList: React.FC<PromptListProps> = ({
     return Array.from(activeCats).sort();
   }, [validCategories, currentArea, areaPrompts]);
 
+  // 3. Calculate prompt counts per category (scoped to current area and other filters)
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let list = areaPrompts;
+
+    if (filter.search) {
+      const searchLower = filter.search.toLowerCase();
+      list = list.filter(p =>
+        p.title.toLowerCase().includes(searchLower) ||
+        p.tags.some(t => t.toLowerCase().includes(searchLower))
+      );
+    }
+    if (filter.app !== 'All') {
+      list = list.filter(p => p.apps && p.apps.includes(filter.app));
+    }
+    if (filter.rating && filter.rating > 0) {
+      list = list.filter(p => (p.rating || 0) >= (filter.rating || 0));
+    }
+    if (filter.origin !== 'All') {
+      list = list.filter(p => p.origin === filter.origin);
+    }
+
+    list.forEach(p => {
+      counts[p.category] = (counts[p.category] || 0) + 1;
+    });
+    return counts;
+  }, [areaPrompts, filter.search, filter.app, filter.rating, filter.origin]);
+
   const getFilteredItems = () => {
     // Mode: SNIPPETS
     if (repoMode === 'SNIPPETS') {
@@ -81,9 +109,13 @@ export const PromptList: React.FC<PromptListProps> = ({
         list = list.filter(p => p.apps && p.apps.includes(filter.app));
       }
 
-      // Rating Filter
       if (filter.rating && filter.rating > 0) {
         list = list.filter(p => (p.rating || 0) >= (filter.rating || 0));
+      }
+
+      // Origin Filter
+      if (filter.origin !== 'All') {
+        list = list.filter(p => p.origin === filter.origin);
       }
 
       if (viewMode === 'FAVORITES') return list.filter(p => p.isFavorite);
@@ -125,12 +157,14 @@ export const PromptList: React.FC<PromptListProps> = ({
 
   const displayedItems = getFilteredItems();
 
-  const handleCategoryHover = (cat: string) => {
-    if (repoMode === 'SNIPPETS') setExpandedCat(cat);
-  };
+  // Subcategory options for the selected category
+  const subcategoryOptions = useMemo(() => {
+    if (filter.category === 'All') return [];
+    return categories[filter.category] || [];
+  }, [categories, filter.category]);
 
   const clearFilters = () => {
-    setFilter({ search: '', category: 'All', subcategory: 'All', app: 'All', rating: 0 });
+    setFilter({ search: '', category: 'All', subcategory: 'All', app: 'All', rating: 0, origin: 'All' });
   };
 
   const handleAddClick = (e: React.MouseEvent, prompt: PromptItem) => {
@@ -140,23 +174,8 @@ export const PromptList: React.FC<PromptListProps> = ({
     setTimeout(() => setAddedFeedback(null), 1000);
   };
 
-  // Helper to try and match icon, fallback to box
-  const getIconForCategory = (cat: string) => {
-    const lower = cat.toLowerCase();
-    if (lower.includes('vegeta')) return <Icons.Vegetation size={16} />;
-    if (lower.includes('persona')) return <Icons.People size={16} />;
-    if (lower.includes('mater')) return <Icons.Materials size={16} />;
-    if (lower.includes('ilumina')) return <Icons.Lighting size={16} />;
-    if (lower.includes('arquitect')) return <Icons.ArchStyle size={16} />;
-    if (lower.includes('detall')) return <Icons.Details size={16} />;
-    if (lower.includes('cámara')) return <Icons.Image size={16} />;
-    if (lower.includes('negativ')) return <Icons.Trash size={16} />;
-    if (lower.includes('render')) return <Icons.Materials size={16} />;
-    if (lower.includes('market')) return <Icons.Globe size={16} />;
-    if (lower.includes('memor')) return <Icons.FileText size={16} />;
-    if (lower.includes('autom')) return <Icons.Code size={16} />;
-    return <Icons.Box size={16} />;
-  };
+
+
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString('es-ES', {
@@ -189,59 +208,67 @@ export const PromptList: React.FC<PromptListProps> = ({
         </button>
       </div>
 
-      {/* Search Bar & App Filter */}
-      <div className="p-4 border-b border-arch-800 bg-arch-900 space-y-3">
+      {/* Search Bar + Filters — compact 2-row layout */}
+      <div className="px-3 py-2 border-b border-arch-800 bg-arch-900 space-y-1.5">
+        {/* Row 1: Search */}
         <div className="relative">
           <input
             type="text"
             placeholder={repoMode === 'SNIPPETS' ? "Buscar prompts..." : "Buscar composiciones..."}
             value={filter.search}
             onChange={(e) => setFilter(prev => ({ ...prev, search: e.target.value }))}
-            className="w-full bg-arch-950 border border-arch-700 text-arch-100 text-sm rounded-md py-2 pl-9 pr-3 focus:outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500 placeholder-arch-500"
+            className="w-full bg-arch-950 border border-arch-700 text-arch-100 text-xs rounded-md py-1.5 pl-8 pr-3 focus:outline-none focus:border-accent-500 placeholder-arch-500"
           />
-          <Icons.Search className="absolute left-3 top-2.5 text-arch-500" size={16} />
+          <Icons.Search className="absolute left-2.5 top-2 text-arch-500" size={14} />
         </div>
 
-        <div className="flex space-x-2">
+        {/* Row 2: App + Rating + Origin */}
+        <div className="flex items-center gap-1.5">
           <div className="relative flex-1">
             <select
               value={filter.app}
               onChange={(e) => setFilter(prev => ({ ...prev, app: e.target.value }))}
-              className="w-full appearance-none bg-arch-950 border border-arch-700 text-arch-300 text-xs rounded-md py-1.5 pl-3 pr-8 focus:outline-none focus:border-accent-500"
+              className="w-full appearance-none bg-arch-950 border border-arch-700 text-arch-300 text-xs rounded py-1 pl-2 pr-6 focus:outline-none focus:border-accent-500"
             >
               <option value="All">Todas las Apps</option>
               {availableApps.map(app => (
                 <option key={app} value={app}>{app}</option>
               ))}
             </select>
-            <Icons.App className="absolute right-2 top-1.5 text-arch-500 pointer-events-none" size={14} />
+            <Icons.App className="absolute right-1.5 top-1.5 text-arch-500 pointer-events-none" size={12} />
           </div>
-          <button
-            onClick={onManageApps}
-            className="px-2 py-1.5 bg-arch-800 border border-arch-700 rounded-md text-arch-400 hover:text-white"
-            title="Gestionar Apps"
-          >
-            <Icons.Settings size={14} />
-          </button>
-        </div>
 
-        {/* Rating Filter */}
-        <div className="flex items-center space-x-2 bg-arch-950 border border-arch-700 rounded-md px-2 py-1">
-          <span className="text-[10px] text-arch-500 font-bold uppercase">Min Stars:</span>
-          <div className="flex space-x-1">
+          {/* Rating compact */}
+          <div className="flex items-center gap-0.5 bg-arch-950 border border-arch-700 rounded px-1 py-0.5">
             {[0, 1, 2, 3, 4, 5].map(star => (
               <button
                 key={star}
                 onClick={() => setFilter(prev => ({ ...prev, rating: star }))}
-                className={`text-xs font-medium px-1.5 py-0.5 rounded transition-colors ${(filter.rating || 0) === star
-                  ? 'bg-yellow-500/20 text-yellow-500'
-                  : 'text-arch-600 hover:text-arch-400'
+                className={`text-[10px] font-medium px-1 py-0.5 rounded transition-colors ${(filter.rating || 0) === star ? 'bg-yellow-500/20 text-yellow-500' : 'text-arch-600 hover:text-arch-400'
                   }`}
               >
-                {star === 0 ? 'All' : star}
+                {star === 0 ? '★' : star}
               </button>
             ))}
           </div>
+
+          {/* Origin */}
+          <div className="flex items-center gap-0.5 bg-arch-950 border border-arch-700 rounded px-0.5 py-0.5">
+            <button
+              onClick={() => setFilter(prev => ({ ...prev, origin: prev.origin === 'user' ? 'All' : 'user' }))}
+              className={`p-1 rounded transition-colors ${filter.origin === 'user' ? 'bg-emerald-500/20 text-emerald-500' : 'text-arch-600 hover:text-arch-400'}`}
+              title="Origen: Usuario"
+            ><Icons.User size={12} /></button>
+            <button
+              onClick={() => setFilter(prev => ({ ...prev, origin: prev.origin === 'internet' ? 'All' : 'internet' }))}
+              className={`p-1 rounded transition-colors ${filter.origin === 'internet' ? 'bg-indigo-500/20 text-indigo-500' : 'text-arch-600 hover:text-arch-400'}`}
+              title="Origen: Web"
+            ><Icons.Globe size={12} /></button>
+          </div>
+
+          <button onClick={onManageApps} className="p-1.5 bg-arch-800 border border-arch-700 rounded text-arch-400 hover:text-white" title="Gestionar Apps">
+            <Icons.Settings size={12} />
+          </button>
         </div>
       </div>
 
@@ -275,82 +302,112 @@ export const PromptList: React.FC<PromptListProps> = ({
         </button>
       </div>
 
-      {/* Category Filters (Only in Library Mode) */}
+      {/* Category + Subcategory Dropdowns — hover-activated */}
       {viewMode === 'LIBRARY' && (
-        <div className="border-b border-arch-800 bg-arch-900">
-          <div className="flex flex-wrap gap-1 p-2">
+        <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-arch-800 bg-arch-950/60">
 
-            {/* Dynamic Categories */}
-            {categoriesToShow.map((cat) => (
-              <div
-                key={cat}
-                className="relative group"
-                onMouseEnter={() => handleCategoryHover(cat)}
-                onMouseLeave={() => setExpandedCat(null)}
-              >
+          {/* Category hover dropdown */}
+          <div
+            className="relative flex-1"
+            onMouseEnter={() => setHoveredDropdown('category')}
+            onMouseLeave={() => setHoveredDropdown(null)}
+          >
+            <button className={`w-full flex items-center justify-between gap-1 px-2 py-1 rounded border text-xs transition-colors ${filter.category !== 'All'
+                ? 'bg-accent-600/20 border-accent-500 text-accent-300'
+                : 'bg-arch-900 border-arch-700 text-arch-300 hover:border-arch-500'
+              }`}>
+              <span className="truncate">
+                {filter.category === 'All'
+                  ? `Categoría (${Object.values(categoryCounts).reduce((a, b) => a + b, 0)})`
+                  : `${filter.category} (${categoryCounts[filter.category] || 0})`
+                }
+              </span>
+              <Icons.ChevronDown size={11} className="flex-shrink-0 text-arch-500" />
+            </button>
+
+            {hoveredDropdown === 'category' && (
+              <div className="absolute top-full left-0 right-0 mt-0.5 z-50 bg-arch-800 border border-arch-600 rounded-md shadow-xl py-1 max-h-64 overflow-y-auto no-scrollbar">
                 <button
-                  onClick={() => setFilter(prev => ({ ...prev, category: cat === prev.category ? 'All' : cat, subcategory: 'All' }))}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${filter.category === cat
-                    ? 'bg-accent-600 border-accent-600 text-white'
-                    : 'bg-arch-800 border-arch-700 text-arch-300 hover:border-arch-500'
+                  onMouseDown={() => { setFilter(prev => ({ ...prev, category: 'All', subcategory: 'All' })); setHoveredDropdown(null); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${filter.category === 'All' ? 'text-accent-400 bg-accent-500/10' : 'text-arch-400 hover:bg-arch-700 hover:text-white'
                     }`}
                 >
-                  {getIconForCategory(cat)}
-                  <span>{cat}</span>
+                  — Todas las categorías
                 </button>
-
-                {/* Subcategories only available in SNIPPET mode */}
-                {repoMode === 'SNIPPETS' && expandedCat === cat && categories[cat] && categories[cat].length > 0 && (
-                  <div className="absolute top-full left-0 pt-2 w-56 z-50">
-                    <div className="bg-arch-800 border border-arch-600 rounded-md shadow-xl py-1">
-                      <div className="px-3 py-1 text-[10px] uppercase text-arch-500 tracking-wider font-bold">Explorar</div>
-                      {categories[cat].map(sub => (
-                        <button
-                          key={sub}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFilter({ ...filter, category: cat, subcategory: sub });
-                            setExpandedCat(null);
-                          }}
-                          className="block w-full text-left px-4 py-2 text-sm text-arch-200 hover:bg-arch-700 hover:text-white"
-                        >
-                          {sub}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {categoriesToShow.map(cat => (
+                  <button
+                    key={cat}
+                    onMouseDown={() => { setFilter(prev => ({ ...prev, category: cat, subcategory: 'All' })); setHoveredDropdown(null); }}
+                    className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between gap-2 ${filter.category === cat ? 'text-accent-300 bg-accent-500/20' : 'text-arch-200 hover:bg-arch-700 hover:text-white'
+                      }`}
+                  >
+                    <span className="truncate">{cat}</span>
+                    <span className="text-[10px] text-arch-500 flex-shrink-0">{categoryCounts[cat] || 0}</span>
+                  </button>
+                ))}
               </div>
-            ))}
+            )}
+          </div>
 
-            <div className="flex items-center space-x-1 ml-auto">
-              <button
-                onClick={onManageCategories}
-                className="px-2 py-1.5 rounded-full bg-arch-800 border border-arch-700 text-arch-400 hover:text-white hover:border-accent-500"
-                title="Gestionar Categorías"
-              >
-                <Icons.Settings size={14} />
+          {/* Subcategory hover dropdown — only when category is selected and has subcategories */}
+          {filter.category !== 'All' && subcategoryOptions.length > 0 && (
+            <div
+              className="relative flex-1"
+              onMouseEnter={() => setHoveredDropdown('subcategory')}
+              onMouseLeave={() => setHoveredDropdown(null)}
+            >
+              <button className={`w-full flex items-center justify-between gap-1 px-2 py-1 rounded border text-xs transition-colors ${filter.subcategory !== 'All'
+                  ? 'bg-accent-600/20 border-accent-500 text-accent-300'
+                  : 'bg-arch-900 border-arch-700 text-arch-300 hover:border-arch-500'
+                }`}>
+                <span className="truncate">
+                  {filter.subcategory === 'All' ? 'Subcategoría' : filter.subcategory}
+                </span>
+                <Icons.ChevronDown size={11} className="flex-shrink-0 text-arch-500" />
               </button>
-              <button
-                onClick={onOpenBackup}
-                className="px-2 py-1.5 rounded-full bg-arch-800 border border-arch-700 text-arch-400 hover:text-accent-500 hover:border-accent-500"
-                title="Copia de Seguridad / Datos"
-              >
-                <Icons.Database size={14} />
-              </button>
+
+              {hoveredDropdown === 'subcategory' && (
+                <div className="absolute top-full left-0 right-0 mt-0.5 z-50 bg-arch-800 border border-arch-600 rounded-md shadow-xl py-1 max-h-64 overflow-y-auto no-scrollbar">
+                  <button
+                    onMouseDown={() => { setFilter(prev => ({ ...prev, subcategory: 'All' })); setHoveredDropdown(null); }}
+                    className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${filter.subcategory === 'All' ? 'text-accent-400 bg-accent-500/10' : 'text-arch-400 hover:bg-arch-700 hover:text-white'
+                      }`}
+                  >
+                    — Todas las subcategorías
+                  </button>
+                  {subcategoryOptions.map(sub => (
+                    <button
+                      key={sub}
+                      onMouseDown={() => { setFilter(prev => ({ ...prev, subcategory: sub })); setHoveredDropdown(null); }}
+                      className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${filter.subcategory === sub ? 'text-accent-300 bg-accent-500/20' : 'text-arch-200 hover:bg-arch-700 hover:text-white'
+                        }`}
+                    >
+                      {sub}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+          )}
 
-            {(filter.category !== 'All' || filter.subcategory !== 'All' || filter.app !== 'All') && (
-              <button onClick={clearFilters} className="px-2 py-1 text-xs text-arch-400 hover:text-white">
+          {/* Action buttons */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {(filter.category !== 'All' || filter.subcategory !== 'All') && (
+              <button
+                onClick={clearFilters}
+                className="p-1.5 text-arch-400 hover:text-white transition-colors"
+                title="Limpiar filtros"
+              >
                 <Icons.Refresh size={12} />
               </button>
             )}
+            <button onClick={onManageCategories} className="p-1.5 bg-arch-800 border border-arch-700 rounded text-arch-400 hover:text-white hover:border-accent-500 transition-colors" title="Gestionar Categorías">
+              <Icons.Settings size={12} />
+            </button>
+            <button onClick={onOpenBackup} className="p-1.5 bg-arch-800 border border-arch-700 rounded text-arch-400 hover:text-accent-500 hover:border-accent-500 transition-colors" title="Datos / Backup">
+              <Icons.Database size={12} />
+            </button>
           </div>
-          {repoMode === 'SNIPPETS' && filter.subcategory !== 'All' && (
-            <div className="px-4 pb-2 text-xs text-accent-500 font-medium truncate">
-              {filter.category} <span className="text-arch-500 mx-1">/</span> {filter.subcategory}
-            </div>
-          )}
         </div>
       )}
 

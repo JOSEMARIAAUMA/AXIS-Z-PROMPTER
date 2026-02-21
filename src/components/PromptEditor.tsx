@@ -230,10 +230,21 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
           <div className="flex items-center space-x-6 bg-arch-950/30 p-3 rounded-lg border border-arch-800/50">
             <div>
               <label className="block text-[10px] font-medium text-arch-500 mb-1 uppercase tracking-wider">Origen</label>
-              <div className="flex items-center space-x-2 text-sm text-arch-300">
-                {edited.origin === 'internet' ? <Icons.Globe size={14} className="text-indigo-400" /> : <Icons.User size={14} className="text-emerald-400" />}
-                <span className="capitalize">{edited.origin || 'User'}</span>
-              </div>
+              <button
+                onClick={() => {
+                  const nextOrigin = edited.origin === 'user' ? 'internet' : 'user';
+                  handleChange('origin', nextOrigin);
+                }}
+                className={`flex items-center space-x-2 px-2 py-1 rounded border transition-colors ${edited.origin === 'internet'
+                  ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                  }`}
+              >
+                {edited.origin === 'internet' ? <Icons.Globe size={14} /> : <Icons.User size={14} />}
+                <span className="text-xs font-medium uppercase tracking-tight">
+                  {edited.origin === 'internet' ? 'Web' : 'User'}
+                </span>
+              </button>
             </div>
 
             <div>
@@ -264,8 +275,8 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   key={app}
                   onClick={() => toggleApp(app)}
                   className={`px-2 py-1 rounded text-xs border transition-colors ${(edited.apps || []).includes(app)
-                      ? 'bg-blue-900 border-blue-500 text-white'
-                      : 'bg-arch-950 border-arch-700 text-arch-500 hover:border-arch-500'
+                    ? 'bg-blue-900 border-blue-500 text-white'
+                    : 'bg-arch-950 border-arch-700 text-arch-500 hover:border-arch-500'
                     }`}
                 >
                   {app}

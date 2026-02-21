@@ -31,11 +31,10 @@ function App() {
 
   // State: Context / Super Category
   const [areas, setAreas] = useState<AreaInfo[]>(DEFAULT_AREAS);
-  const [currentArea, setCurrentArea] = useState<AreaType>('IMAGE');
+  const [currentArea, setCurrentArea] = useState<AreaType>('MARKETING_PRODUCTIVIDAD');
 
-  // Sync: Reset filters when switching Area
   useEffect(() => {
-    setFilter(prev => ({ ...prev, category: 'All', subcategory: 'All' }));
+    setFilter(prev => ({ ...prev, category: 'All', subcategory: 'All', origin: 'All' }));
   }, [currentArea]);
 
   // State: Compiler (Keep Local for Draft Performance)
@@ -51,7 +50,7 @@ function App() {
   const [rightTab, setRightTab] = useState<RightPanelTab>('COMPILER');
 
   // State: UI Filters
-  const [filter, setFilter] = useState<FilterState>({ search: '', category: 'All', subcategory: 'All', app: 'All', rating: 0 });
+  const [filter, setFilter] = useState<FilterState>({ search: '', category: 'All', subcategory: 'All', app: 'All', rating: 0, origin: 'All' });
 
   // State: Modals
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -671,7 +670,7 @@ function App() {
   const handleAreaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setCurrentArea(e.target.value as AreaType);
     // Reset filter when changing area
-    setFilter(prev => ({ ...prev, search: '', category: 'All', subcategory: 'All' }));
+    setFilter(prev => ({ ...prev, search: '', category: 'All', subcategory: 'All', origin: 'All' }));
     setSelectedId(null);
   };
 
