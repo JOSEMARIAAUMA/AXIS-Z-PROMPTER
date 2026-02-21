@@ -37,18 +37,28 @@ export const PromptList: React.FC<PromptListProps> = ({
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
 
   // 1. First, filter EVERYTHING by the Current Area
-  const areaPrompts = useMemo(() => prompts.filter(p => p.area === currentArea), [prompts, currentArea]);
-  const areaCompositions = useMemo(() => compositions.filter(c => c.area === currentArea), [compositions, currentArea]);
+  const areaPrompts = useMemo(() => {
+    if (currentArea === 'GLOBAL') return prompts;
+    // Use the categories allowed for this area to filter prompts
+    if (validCategories && validCategories.length > 0) {
+      return prompts.filter(p => validCategories.includes(p.category));
+    }
+    // Fallback for edge cases where validCategories might be empty/null
+    return prompts.filter(p => p.area === currentArea);
+  }, [prompts, currentArea, validCategories]);
 
-  // 2. Derive valid categories for the current area. 
-  // Priority: Use the one passed from parent (state-driven), otherwise fallback to logic.
+  const areaCompositions = useMemo(() =>
+    currentArea === 'GLOBAL' ? compositions : compositions.filter(c => c.area === currentArea),
+    [compositions, currentArea]);
+
+  // 2. Derive categories to show in the filter UI
   const categoriesToShow = useMemo(() => {
-    if (validCategories) return validCategories;
+    if (validCategories) return validCategories.sort();
 
+    // Fallback logic
     const areaCats = AREA_CATEGORIES[currentArea] || [];
     const activeCats = new Set<string>(areaCats);
     areaPrompts.forEach(p => activeCats.add(p.category));
-
     return Array.from(activeCats).sort();
   }, [validCategories, currentArea, areaPrompts]);
 
