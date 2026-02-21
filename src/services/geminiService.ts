@@ -303,3 +303,28 @@ export const analyzeCompilerAgainstLibrary = async (
         return [];
     }
 };
+
+export const improvePrompt = async (promptText: string): Promise<string> => {
+    if (!apiKey) return promptText;
+
+    const model = genAI.getGenerativeModel({ model: MODEL_FAST });
+    const systemInstruction = `
+        You are an expert prompt engineer for architectural visualization.
+        Your goal is to improve the given prompt to make it more effective for AI image generation (Midjourney/Stable Diffusion).
+        - Enhance descriptive details (lighting, materials, atmosphere, camera angle).
+        - Clarify the subject and composition.
+        - Ensure professional architectural terminology.
+        - Return ONLY the improved prompt text in English.
+    `;
+
+    try {
+        const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: `System: ${systemInstruction}\nPrompt to improve: "${promptText}"` }] }]
+        });
+        const response = await result.response;
+        return response.text() || promptText;
+    } catch (error) {
+        console.error("Prompt Improvement Error", error);
+        return promptText;
+    }
+};

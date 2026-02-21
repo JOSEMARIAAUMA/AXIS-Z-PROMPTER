@@ -9,10 +9,14 @@ import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { DataManagementModal } from './components/DataManagementModal';
 import { AppManagerModal } from './components/AppManagerModal';
 import { Icons } from './components/Icon';
-import { getPrompts, savePrompts, getSettings, saveSettings, getCompiledPrompt, saveCompiledPrompt, getCustomCategories, saveCustomCategories, getSavedCompositions, saveSavedCompositions, getCustomAppList, saveCustomAppList } from './services/storageService';
-import { PromptItem, AppSettings, FilterState, CompiledPrompt, CategoryMap, SavedComposition, LibrarySuggestion, AreaType } from './types';
+// Migration: Switch to Supabase Service
+import * as storage from './services/supabaseStorageService';
+// Also import local service temporarily for migration capability
+import * as localStorageFromService from './services/storageService';
+import { PromptItem, AppSettings, FilterState, CompiledPrompt, CategoryMap, SavedComposition, LibrarySuggestion, AreaType, AreaMapping } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { AREAS, AREA_CONFIG } from './constants';
+import { DEFAULT_AREAS, AREA_CONFIG, INITIAL_PANEL_WIDTHS, AREA_CATEGORIES } from './constants';
+import { AreaInfo } from './types';
 
 type RightPanelTab = 'REFERENCES' | 'COMPILER';
 
@@ -21,24 +25,33 @@ function App() {
   const [prompts, setPrompts] = useState<PromptItem[]>([]);
   const [compositions, setCompositions] = useState<SavedComposition[]>([]);
   const [categories, setCategories] = useState<CategoryMap>({});
+  const [areaMapping, setAreaMapping] = useState<AreaMapping>({});
   const [appList, setAppList] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // State: Context / Super Category
+  const [areas, setAreas] = useState<AreaInfo[]>(DEFAULT_AREAS);
   const [currentArea, setCurrentArea] = useState<AreaType>('IMAGE');
 
-  // State: Compiler
-  const [compiledPrompt, setCompiledPrompt] = useState<CompiledPrompt>(getCompiledPrompt());
+  // Sync: Reset filters when switching Area
+  useEffect(() => {
+    setFilter(prev => ({ ...prev, category: 'All', subcategory: 'All' }));
+  }, [currentArea]);
+
+  // State: Compiler (Keep Local for Draft Performance)
+  const [compiledPrompt, setCompiledPrompt] = useState<CompiledPrompt>({
+    system: "", role: "", subject: "", context: "", details: "", negative: "", params: "", comments: "", apps: []
+  });
   // Track if we are editing an existing saved composition
   const [activeCompositionId, setActiveCompositionId] = useState<string | null>(null);
 
   // State: Settings & Layout
-  const [settings, setSettings] = useState<AppSettings>(getSettings());
+  const [settings, setSettings] = useState<AppSettings>({ panelWidths: INITIAL_PANEL_WIDTHS, theme: 'dark' });
   const [isResizing, setIsResizing] = useState<'left' | 'right' | null>(null);
   const [rightTab, setRightTab] = useState<RightPanelTab>('COMPILER');
 
   // State: UI Filters
-  const [filter, setFilter] = useState<FilterState>({ search: '', category: 'All', subcategory: 'All', app: 'All' });
+  const [filter, setFilter] = useState<FilterState>({ search: '', category: 'All', subcategory: 'All', app: 'All', rating: 0 });
 
   // State: Modals
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -46,47 +59,182 @@ function App() {
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [isAppManagerOpen, setIsAppManagerOpen] = useState(false);
   const [analyzeImageTarget, setAnalyzeImageTarget] = useState<string | undefined>(undefined);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize Data
+
+  // 1. Initial Data Load
   useEffect(() => {
-    setPrompts(getPrompts());
-    setCategories(getCustomCategories());
-    setCompositions(getSavedCompositions());
-    setAppList(getCustomAppList());
+    const loadData = async () => {
+      try {
+        const [loadedPrompts, catsData, loadedSettings, loadedApps, loadedComps] = await Promise.all([
+          storage.getPrompts(),
+          storage.getCustomCategories(),
+          storage.getSettings(),
+          storage.getAppLists(),
+          storage.getSavedCompositions()
+        ]);
+
+        const loadedCats = catsData.map;
+        const loadedAreaMapping = catsData.areaMapping;
+        const loadedAreas = catsData.areas.length > 0 ? catsData.areas : DEFAULT_AREAS;
+
+        setPrompts(loadedPrompts);
+        setSettings(loadedSettings);
+        setCategories(loadedCats);
+        setAreaMapping(loadedAreaMapping);
+        setAreas(loadedAreas);
+        setAppList(loadedApps);
+        setCompositions(loadedComps);
+
+        // Category Reconciliation: Ensure all categories found in prompts are in the manager
+        const foundCategories = new Set<string>();
+        loadedPrompts.forEach(p => {
+          if (p.category) foundCategories.add(p.category);
+        });
+
+        const mergedCats = { ...loadedCats };
+        const mergedAreaMapping = { ...loadedAreaMapping };
+        let hasChanges = false;
+
+        foundCategories.forEach(cat => {
+          if (!mergedCats[cat]) {
+            mergedCats[cat] = [];
+            // Try to figure out area from existing AREA_CATEGORIES constant if possible
+            let areaIds: AreaType[] = ['TEXT']; // Default
+            for (const [a, cats] of Object.entries(AREA_CATEGORIES)) {
+              if ((cats as string[]).includes(cat)) {
+                areaIds = [a as AreaType];
+                break;
+              }
+            }
+            mergedAreaMapping[cat] = areaIds;
+            hasChanges = true;
+          }
+        });
+
+        if (hasChanges) {
+          setCategories(mergedCats);
+          setAreaMapping(mergedAreaMapping);
+          storage.saveCustomCategories(mergedCats, mergedAreaMapping, loadedAreas);
+        }
+
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
   }, []);
 
-  // Persistence
+  // Persistence: Settings & Compiler Draft (local)
   useEffect(() => {
-    if (prompts.length > 0) savePrompts(prompts);
-  }, [prompts]);
-
-  useEffect(() => {
-    if (Object.keys(categories).length > 0) saveCustomCategories(categories);
-  }, [categories]);
-
-  useEffect(() => {
-    saveSavedCompositions(compositions);
-  }, [compositions]);
-
-  useEffect(() => {
-    saveCustomAppList(appList);
-  }, [appList]);
-
-  useEffect(() => {
-    saveSettings(settings);
+    storage.saveSettings(settings);
   }, [settings]);
 
   useEffect(() => {
-    saveCompiledPrompt(compiledPrompt);
+    storage.saveCompiledPrompt(compiledPrompt);
   }, [compiledPrompt]);
 
-  // Handlers: Category Management
-  const handleUpdateCategories = (newCategories: CategoryMap) => {
-    setCategories(newCategories);
-  };
 
-  const handleUpdateApps = (newApps: string[]) => {
+  // --- HANDLERS ---
+
+  // Handlers: Category Management
+  const handleUpdateCategories = useCallback(async (newCats: CategoryMap, newAreaMapping: AreaMapping) => {
+    setCategories(newCats);
+    setAreaMapping(newAreaMapping);
+    await storage.saveCustomCategories(newCats, newAreaMapping, areas);
+  }, [areas]);
+
+  const handleRenameCategory = useCallback(async (oldName: string, newName: string) => {
+    // 1. Calculate local copies to avoid stale closure state
+    const nextCats = { ...categories };
+    nextCats[newName] = nextCats[oldName];
+    delete nextCats[oldName];
+
+    const nextMapping = { ...areaMapping };
+    nextMapping[newName] = nextMapping[oldName] || ['TEXT'];
+    delete nextMapping[oldName];
+
+    // 2. Update state functionally
+    setCategories(nextCats);
+    setAreaMapping(nextMapping);
+
+    // 3. Update prompts state functionally
+    setPrompts(prev => prev.map(p =>
+      p.category === oldName ? { ...p, category: newName, lastModified: Date.now() } : p
+    ));
+
+    // 4. Persist categories
+    await storage.saveCustomCategories(nextCats, nextMapping, areas);
+
+    // 5. Update prompts in DB
+    const affectedPrompts = prompts.filter(p => p.category === oldName);
+    for (const p of affectedPrompts) {
+      await storage.savePrompt({ ...p, category: newName, lastModified: Date.now() });
+    }
+  }, [categories, areaMapping, prompts, areas]);
+
+  const handleRenameSubcategory = useCallback(async (category: string, oldSub: string, newSub: string) => {
+    // 1. Calculate local copies
+    const nextCats = { ...categories };
+    if (nextCats[category]) {
+      nextCats[category] = nextCats[category].map(s => s === oldSub ? newSub : s);
+    }
+
+    // 2. Update state
+    setCategories(nextCats);
+
+    // 3. Update prompts state
+    setPrompts(prev => prev.map(p =>
+      (p.category === category && p.subcategory === oldSub)
+        ? { ...p, subcategory: newSub, lastModified: Date.now() }
+        : p
+    ));
+
+    // 4. Persist
+    await storage.saveCustomCategories(nextCats, areaMapping, areas);
+
+    // 5. Update prompts in DB
+    const affectedPrompts = prompts.filter(p => p.category === category && p.subcategory === oldSub);
+    for (const p of affectedPrompts) {
+      await storage.savePrompt({ ...p, subcategory: newSub, lastModified: Date.now() });
+    }
+  }, [categories, areaMapping, prompts, areas]);
+
+  // Handlers: Area Management
+  const handleAddArea = useCallback(async (newArea: AreaInfo) => {
+    const nextAreas = [...areas, newArea];
+    setAreas(nextAreas);
+    await storage.saveCustomCategories(categories, areaMapping, nextAreas);
+  }, [areas, categories, areaMapping]);
+
+  const handleDeleteArea = useCallback(async (areaId: string) => {
+    const nextAreas = areas.filter(a => a.id !== areaId);
+    setAreas(nextAreas);
+    // Note: Categories mapped to this area will stay but areaMapping will be orphan
+    // We optionally move them to 'GLOBAL' or 'TEXT'
+    const nextMapping = { ...areaMapping };
+    Object.keys(nextMapping).forEach(cat => {
+      if (nextMapping[cat]?.includes(areaId)) {
+        nextMapping[cat] = nextMapping[cat].filter(id => id !== areaId);
+        if (nextMapping[cat].length === 0) nextMapping[cat] = ['TEXT'];
+      }
+    });
+    setAreaMapping(nextMapping);
+    await storage.saveCustomCategories(categories, nextMapping, nextAreas);
+  }, [areas, categories, areaMapping]);
+
+  const handleUpdateArea = useCallback(async (updatedArea: AreaInfo) => {
+    const nextAreas = areas.map(a => a.id === updatedArea.id ? updatedArea : a);
+    setAreas(nextAreas);
+    await storage.saveCustomCategories(categories, areaMapping, nextAreas);
+  }, [areas, categories, areaMapping]);
+
+  const handleUpdateApps = async (newApps: string[]) => {
     setAppList(newApps);
+    await storage.saveAppLists(newApps);
   };
 
   // Handlers: Prompt Management
@@ -95,14 +243,31 @@ function App() {
     setAnalyzeImageTarget(undefined);
   };
 
-  const handleToggleFavorite = (id: string, e: React.MouseEvent) => {
+  const handleToggleFavorite = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setPrompts(prompts.map(p =>
-      p.id === id ? { ...p, isFavorite: !p.isFavorite } : p
-    ));
-  };
+    let updatedItem: PromptItem | undefined;
 
-  const handleAdd = () => {
+    setPrompts(prev => {
+      const newList = prev.map(p => {
+        if (p.id === id) {
+          updatedItem = { ...p, isFavorite: !p.isFavorite };
+          return updatedItem;
+        }
+        return p;
+      });
+      return newList;
+    });
+
+    // We need to wait for the item to be "captured" or find it in the current list
+    // To be safer and avoid waiting for state, we find it in the current prompts closure
+    // but the functional update is better for the UI.
+    const item = prompts.find(p => p.id === id);
+    if (item) {
+      await storage.savePrompt({ ...item, isFavorite: !item.isFavorite });
+    }
+  }, [prompts]);
+
+  const handleAdd = async () => {
     const defaultCat = Object.keys(categories)[0] || 'General';
     const newPrompt: PromptItem = {
       id: uuidv4(),
@@ -118,50 +283,143 @@ function App() {
       isFavorite: false,
       lastModified: Date.now(),
     };
+
+    // Optimistic UI Update
     setPrompts([newPrompt, ...prompts]);
     setSelectedId(newPrompt.id);
+
+    // Async Save
+    await storage.savePrompt(newPrompt);
   };
 
-  const handleSave = (updated: PromptItem) => {
-    setPrompts(prompts.map(p => p.id === updated.id ? updated : p));
-  };
+  const handleSave = async (updated: PromptItem) => {
+    // Optimistic UI Update using functional update to ensure we have latest version
+    setPrompts(prev => prev.map(p => p.id === updated.id ? updated : p));
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este prompt?')) {
-      setPrompts(prompts.filter(p => p.id !== id));
-      if (selectedId === id) setSelectedId(null);
+    // Async Save
+    try {
+      await storage.savePrompt(updated);
+    } catch (err) {
+      console.error("Save failed, reverting UI:", err);
+      // Optional: Revert UI or show error
     }
   };
 
-  const handleDuplicate = (prompt: PromptItem) => {
+  const handleDelete = useCallback(async (id: string) => {
+    if (window.confirm('¿Estás seguro de que quieres eliminar este prompt?')) {
+      setPrompts(prev => prev.filter(p => p.id !== id));
+      if (selectedId === id) setSelectedId(null);
+      await storage.deletePrompt(id);
+    }
+  }, [selectedId]);
+
+  const handleDuplicate = useCallback(async (prompt: PromptItem) => {
     const newPrompt = {
       ...prompt,
       id: uuidv4(),
       title: `${prompt.title} (Copia)`,
       lastModified: Date.now()
     };
-    setPrompts([newPrompt, ...prompts]);
-    setSelectedId(newPrompt.id);
-  }
 
-  const handleUpdateImages = (images: string[]) => {
+    setPrompts(prev => [newPrompt, ...prev]);
+    setSelectedId(newPrompt.id);
+    await storage.savePrompt(newPrompt);
+  }, []);
+
+  const handleUpdateImages = async (images: string[]) => {
     if (selectedId) {
       const updated = prompts.find(p => p.id === selectedId);
       if (updated) {
-        handleSave({ ...updated, images, lastModified: Date.now() });
+        const newItem = { ...updated, images, lastModified: Date.now() };
+        handleSave(newItem);
       }
     }
   };
 
-  const handleImportSuccess = (newPrompts: PromptItem[], newCategories: CategoryMap, newCompositions: SavedComposition[]) => {
-    setPrompts(newPrompts);
-    setCategories(newCategories);
-    setCompositions(newCompositions);
+  const handleImportSuccess = async (newPrompts: PromptItem[], newCategories: CategoryMap, newCompositions: SavedComposition[]) => {
+    try {
+      setPrompts(newPrompts);
+      setCategories(newCategories);
+      setCompositions(newCompositions);
 
-    savePrompts(newPrompts);
-    saveCustomCategories(newCategories);
-    saveSavedCompositions(newCompositions);
-    setIsDataModalOpen(false);
+      // Re-map areas for categories from the imported data if possible, or default to TEXT
+      const newAreaMapping = { ...areaMapping };
+      Object.keys(newCategories).forEach(cat => {
+        if (!newAreaMapping[cat]) newAreaMapping[cat] = ['TEXT'];
+      });
+      setAreaMapping(newAreaMapping);
+
+      console.log("Saving imported data to Supabase...");
+      for (const p of newPrompts) await storage.savePrompt(p);
+      await storage.saveCustomCategories(newCategories, newAreaMapping, areas);
+      for (const c of newCompositions) await storage.saveComposition(c);
+
+      setIsDataModalOpen(false);
+      alert("✅ Importación completada y sincronizada con la nube.");
+    } catch (err) {
+      console.error("Import sync error:", err);
+      alert("❌ Error al sincronizar los datos con la nube.");
+    }
+  };
+
+  // --- MIGRATION LOGIC ---
+  const handleMigrateData = async () => {
+    if (!window.confirm("¿Migrar datos locales a la nube (Supabase)? Esto subirá tus datos actuales.")) return;
+
+    setIsMigrating(true);
+    try {
+      // 1. Read Local Data (Synchronously from localStorage service)
+      const localPrompts = localStorageFromService.getPrompts();
+      const localCats = localStorageFromService.getCustomCategories();
+      const localComps = localStorageFromService.getSavedCompositions();
+      const localApps = localStorageFromService.getCustomAppList();
+      const localSettings = localStorageFromService.getSettings();
+
+      // 2. Upload to Supabase
+      console.log(`Starting migration of ${localPrompts.length} prompts...`);
+
+      // Prompts
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const p of localPrompts) {
+        try {
+          await storage.savePrompt(p);
+          successCount++;
+        } catch (err) {
+          console.error("Failed to save prompt:", p.title, err);
+          failCount++;
+        }
+      }
+      console.log(`Migration finished. Success: ${successCount}, Failed: ${failCount}`);
+
+      // Categories (Assuming local doesn't have area mapping, so we initialize)
+      const newAreaMapping = { ...areaMapping };
+      Object.keys(localCats).forEach(cat => {
+        if (!newAreaMapping[cat]) newAreaMapping[cat] = ['TEXT'];
+      });
+      await storage.saveCustomCategories(localCats, newAreaMapping, areas);
+
+      // Compositions
+      for (const c of localComps) {
+        await storage.saveComposition(c);
+      }
+
+      // Apps
+      await storage.saveAppLists(localApps);
+
+      // Settings
+      await storage.saveSettings(localSettings);
+
+      alert(`¡Migración completada!\n\nPrompts subidos: ${successCount}\nFallidos: ${failCount}\n\nLa página se recargará ahora.`);
+      window.location.reload();
+
+    } catch (e) {
+      console.error("Migration Error:", e);
+      alert("Hubo un error CRÍTICO durante la migración. Abre la consola (F12) para ver detalles.");
+    } finally {
+      setIsMigrating(false);
+    }
   };
 
   // --- COMPOSITION LOGIC ---
@@ -417,8 +675,25 @@ function App() {
     setSelectedId(null);
   };
 
-  // Use either custom app list (if heavily modified) OR the area-specific default
-  const areaSpecificApps = AREA_CONFIG[currentArea].apps;
+  // --- COMPUTED DATA ---
+  const validCategoriesForArea = currentArea === 'GLOBAL'
+    ? Object.keys(categories)
+    : Object.keys(categories).filter(cat => areaMapping[cat]?.includes(currentArea));
+
+  const areaSpecificApps = currentArea === 'GLOBAL'
+    ? appList
+    : appList; // For now apps are global or follow area if we filter later
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-arch-950 text-arch-100">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-12 h-12 border-4 border-accent-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-arch-400 font-medium animate-pulse">Cargando AXIS-Z...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-arch-950 font-sans text-arch-100">
@@ -445,7 +720,7 @@ function App() {
                   onChange={handleAreaChange}
                   className="appearance-none bg-arch-900 border border-arch-700 text-xs text-white font-bold uppercase rounded-md py-1 pl-2 pr-6 focus:outline-none focus:border-accent-500 cursor-pointer hover:bg-arch-800 transition-colors"
                 >
-                  {AREAS.map(area => (
+                  {areas.map((area: AreaInfo) => (
                     <option key={area.id} value={area.id}>{area.label}</option>
                   ))}
                 </select>
@@ -458,6 +733,7 @@ function App() {
             prompts={prompts}
             compositions={compositions}
             categories={categories}
+            validCategories={validCategoriesForArea} // New prop to handle filtering
             selectedId={selectedId}
             onSelect={handleSelect}
             onSelectComposition={handleSelectComposition}
@@ -480,7 +756,6 @@ function App() {
           width={settings.panelWidths.center}
           title={selectedPrompt ? selectedPrompt.title : 'Editor'}
           className="border-r border-arch-800 z-20"
-          showResizeHandle={false}
           headerActions={
             <button
               onClick={() => { setAnalyzeImageTarget(undefined); setIsAIModalOpen(true); }}
@@ -575,7 +850,14 @@ function App() {
         isOpen={isCategoryManagerOpen}
         onClose={() => setIsCategoryManagerOpen(false)}
         categories={categories}
+        areaMapping={areaMapping}
         onUpdate={handleUpdateCategories}
+        onRenameCategory={handleRenameCategory}
+        onRenameSubcategory={handleRenameSubcategory}
+        areas={areas}
+        onAddArea={handleAddArea}
+        onRenameArea={handleUpdateArea}
+        onDeleteArea={handleDeleteArea}
       />
 
       <AppManagerModal
@@ -592,6 +874,8 @@ function App() {
         currentCategories={categories}
         currentCompositions={compositions}
         onImportSuccess={handleImportSuccess}
+        onMigrateLocal={handleMigrateData}
+        isMigrating={isMigrating}
       />
 
     </div>

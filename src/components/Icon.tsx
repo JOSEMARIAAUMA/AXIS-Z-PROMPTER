@@ -7,7 +7,7 @@ import {
   Languages, Database, Download, FileJson, AlertTriangle,
   Package, LayoutTemplate, Brain, Sparkles,
   MessageSquare, AppWindow, StickyNote, Laptop, Monitor,
-  HelpCircle, Info, Code
+  HelpCircle, Info, Code, Cloud, Rocket, Globe, User
 } from 'lucide-react';
 
 export const Icons = {
@@ -58,5 +58,9 @@ export const Icons = {
   Laptop,
   Help: HelpCircle,
   Info,
-  Code
+  Code,
+  Cloud,
+  Rocket,
+  Globe,
+  User
 };

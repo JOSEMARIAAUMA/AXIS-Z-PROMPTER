@@ -6,146 +6,202 @@ export const INITIAL_PANEL_WIDTHS = {
   right: 25,
 };
 
-// Area Definitions
-export const AREAS: { id: AreaType, label: string, iconName: string }[] = [
-    { id: 'IMAGE', label: 'Imágenes / Renders', iconName: 'Image' },
-    { id: 'TEXT', label: 'Textos / Copywriting', iconName: 'FileText' },
-    { id: 'CODE', label: 'Código / Scripts', iconName: 'Code' }
+// Area Definitions (Defaults)
+export const DEFAULT_AREAS: { id: string, label: string, iconName: string }[] = [
+  { id: 'GLOBAL', label: 'Global / Todo', iconName: 'Globe' },
+  { id: 'IMAGE', label: 'Imágenes / Renders', iconName: 'Image' },
+  { id: 'TEXT', label: 'Textos / Copywriting', iconName: 'FileText' },
+  { id: 'CODE', label: 'Código / Scripts', iconName: 'Code' }
 ];
 
+export const AREAS = DEFAULT_AREAS; // For backward compatibility if needed temporarily
+
 // DYNAMIC CONFIGURATION PER AREA
-export const AREA_CONFIG = {
-    IMAGE: {
-        apps: [
-            'Midjourney v6', 'Stable Diffusion XL', 'DALL-E 3', 'Krea AI', 
-            'Magnific AI', 'ControlNet', 'V-Ray', 'Corona Renderer'
-        ],
-        compiler: {
-            system: { label: "System Instruction", placeholder: "Ej: Actúa como un fotógrafo de arquitectura experto..." },
-            role: { label: "Rol / Estilo Visual", placeholder: "Estilo fotográfico, render 8k, photorealistic..." },
-            subject: { label: "Sujeto / Arquitectura", placeholder: "Descripción del edificio, espacio o volumen..." },
-            context: { label: "Contexto / Luz / Clima", placeholder: "Hora del día, iluminación, entorno, vegetación..." },
-            details: { label: "Detalles / Materiales", placeholder: "Texturas específicas, mobiliario, personas..." },
-            negative: { label: "Negativo / Exclusiones", placeholder: "Lo que NO quieres ver (blur, watermark...)" },
-            params: { label: "Parámetros Técnicos", placeholder: "--ar 16:9 --v 6.0" }
-        },
-        defaultTemplate: {
-            role: "Professional architectural photography, 8k resolution, highly detailed, photorealistic masterpiece, archdaily style",
-            negative: "low quality, blur, watermark, text, bad anatomy, deformed, ugly, pixelated, cartoon, 3d render looking",
-            params: "--ar 16:9 --v 6.0"
-        }
+const APP_CONFIG_BASE = {
+  IMAGE: {
+    apps: [
+      'Midjourney v6', 'Stable Diffusion XL', 'DALL-E 3', 'Krea AI',
+      'Magnific AI', 'ControlNet', 'V-Ray', 'Corona Renderer'
+    ],
+    compiler: {
+      system: { label: "System Instruction", placeholder: "Ej: Actúa como un fotógrafo de arquitectura experto..." },
+      role: { label: "Rol / Estilo Visual", placeholder: "Estilo fotográfico, render 8k, photorealistic..." },
+      subject: { label: "Sujeto / Arquitectura", placeholder: "Descripción del edificio, espacio o volumen..." },
+      context: { label: "Contexto / Luz / Clima", placeholder: "Hora del día, iluminación, entorno, vegetación..." },
+      details: { label: "Detalles / Materiales", placeholder: "Texturas específicas, mobiliario, personas..." },
+      negative: { label: "Negativo / Exclusiones", placeholder: "Lo que NO quieres ver (blur, watermark...)" },
+      params: { label: "Parámetros Técnicos", placeholder: "--ar 16:9 --v 6.0" }
     },
-    TEXT: {
-        apps: [
-            'ChatGPT 4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro', 'NotebookLM', 
-            'Jasper', 'Copy.ai', 'DeepL'
-        ],
-        compiler: {
-            system: { label: "System Persona", placeholder: "Ej: Actúa como un Copywriter Senior especializado en Real Estate..." },
-            role: { label: "Formato / Tipo de Texto", placeholder: "Email de ventas, Memoria descriptiva, Post de Instagram..." },
-            subject: { label: "Tema Principal / Objetivo", placeholder: "Venta de villa de lujo, descripción de materiales sostenibles..." },
-            context: { label: "Audiencia / Tono de Voz", placeholder: "Cliente inversor, tono formal pero cercano, persuasivo..." },
-            details: { label: "Puntos Clave / Estructura", placeholder: "Incluir m2, precio, destacar vistas al mar, usar bullet points..." },
-            negative: { label: "Restricciones / A evitar", placeholder: "No usar jerga técnica compleja, evitar frases pasivas..." },
-            params: { label: "Formato de Salida", placeholder: "Markdown, JSON, Tabla comparativa, Max 200 palabras" }
-        },
-        defaultTemplate: {
-            role: "Professional Real Estate Description, Persuasive Copywriting",
-            negative: "jargon, passive voice, repetitive words, negative sentiment",
-            params: "Format: Markdown"
-        }
-    },
-    CODE: {
-        apps: [
-            'GitHub Copilot', 'Claude 3.5 Sonnet', 'ChatGPT 4o', 'Cursor', 
-            'v0.dev', 'Gemini Code Assist', 'Python'
-        ],
-        compiler: {
-            system: { label: "System / Tech Stack", placeholder: "Ej: Actúa como un Ingeniero de Software Senior en React y Python..." },
-            role: { label: "Lenguaje / Framework", placeholder: "Python script, React Component, Blender Addon..." },
-            subject: { label: "Funcionalidad / Tarea", placeholder: "Crear un script para automatizar layers en Blender..." },
-            context: { label: "Entorno / Runtime", placeholder: "Blender 4.0 API, Node.js v18, Browser environment..." },
-            details: { label: "Lógica / Requisitos", placeholder: "Usar programación funcional, manejar errores try-catch, comentar código..." },
-            negative: { label: "Restricciones / Anti-patterns", placeholder: "No usar librerías depreciadas, evitar loops anidados..." },
-            params: { label: "Formato de Entrega", placeholder: "Single file, Modular structure, Include Unit Tests" }
-        },
-        defaultTemplate: {
-            role: "Production Ready Code, Clean Architecture, SOLID Principles",
-            negative: "deprecated methods, memory leaks, magic numbers, spaghetti code",
-            params: "Language: TypeScript"
-        }
+    defaultTemplate: {
+      role: "Professional architectural photography, 8k resolution, highly detailed, photorealistic masterpiece, archdaily style",
+      negative: "low quality, blur, watermark, text, bad anatomy, deformed, ugly, pixelated, cartoon, 3d render looking",
+      params: "--ar 16:9 --v 6.0"
     }
+  },
+  TEXT: {
+    apps: [
+      'ChatGPT 4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro', 'NotebookLM',
+      'Jasper', 'Copy.ai', 'DeepL'
+    ],
+    compiler: {
+      system: { label: "System Persona", placeholder: "Ej: Actúa como un Copywriter Senior especializado en Real Estate..." },
+      role: { label: "Formato / Tipo de Texto", placeholder: "Email de ventas, Memoria descriptiva, Post de Instagram..." },
+      subject: { label: "Tema Principal / Objetivo", placeholder: "Venta de villa de lujo, descripción de materiales sostenibles..." },
+      context: { label: "Audiencia / Tono de Voz", placeholder: "Cliente inversor, tono formal pero cercano, persuasivo..." },
+      details: { label: "Puntos Clave / Estructura", placeholder: "Incluir m2, precio, destacar vistas al mar, usar bullet points..." },
+      negative: { label: "Restricciones / A evitar", placeholder: "No usar jerga técnica compleja, evitar frases pasivas..." },
+      params: { label: "Formato de Salida", placeholder: "Markdown, JSON, Tabla comparativa, Max 200 palabras" }
+    },
+    defaultTemplate: {
+      role: "Professional Real Estate Description, Persuasive Copywriting",
+      negative: "jargon, passive voice, repetitive words, negative sentiment",
+      params: "Format: Markdown"
+    }
+  },
+  CODE: {
+    apps: [
+      'GitHub Copilot', 'Claude 3.5 Sonnet', 'ChatGPT 4o', 'Cursor',
+      'v0.dev', 'Gemini Code Assist', 'Python'
+    ],
+    compiler: {
+      system: { label: "System / Tech Stack", placeholder: "Ej: Actúa como un Ingeniero de Software Senior en React y Python..." },
+      role: { label: "Lenguaje / Framework", placeholder: "Python script, React Component, Blender Addon..." },
+      subject: { label: "Funcionalidad / Tarea", placeholder: "Crear un script para automatizar layers en Blender..." },
+      context: { label: "Entorno / Runtime", placeholder: "Blender 4.0 API, Node.js v18, Browser environment..." },
+      details: { label: "Lógica / Requisitos", placeholder: "Usar programación funcional, manejar errores try-catch, comentar código..." },
+      negative: { label: "Restricciones / Anti-patterns", placeholder: "No usar librerías depreciadas, evitar loops nidados..." },
+      params: { label: "Formato de Entrega", placeholder: "Single file, Modular structure, Include Unit Tests" }
+    },
+    defaultTemplate: {
+      role: "Production Ready Code, Clean Architecture, SOLID Principles",
+      negative: "deprecated methods, memory leaks, magic numbers, spaghetti code",
+      params: "Language: TypeScript"
+    }
+  }
+};
+
+export const AREA_CONFIG: Record<AreaType, any> = {
+  GLOBAL: {
+    apps: ['Midjourney', 'DALL-E', 'ChatGPT', 'Claude'],
+    compiler: APP_CONFIG_BASE.IMAGE.compiler,
+    defaultTemplate: APP_CONFIG_BASE.IMAGE.defaultTemplate
+  },
+  IMAGE: APP_CONFIG_BASE.IMAGE,
+  TEXT: APP_CONFIG_BASE.TEXT,
+  CODE: APP_CONFIG_BASE.CODE
 };
 
 export const DEFAULT_APPS = AREA_CONFIG.IMAGE.apps; // Fallback
 
-// Expanded and structured subcategories for better filtering
-export const SUBCATEGORIES_MAP: Record<Category, string[]> = {
+// Hierarchical Mapping: Area -> Categories
+export const AREA_CATEGORIES: Record<AreaType, Category[]> = {
+  GLOBAL: [], // Shows everything
+  IMAGE: [
+    Category.CAMERA,
+    Category.LIGHTING,
+    Category.MATERIALS,
+    Category.ARCH_STYLE,
+    Category.VEGETATION,
+    Category.PEOPLE,
+    Category.DETAILS,
+    Category.RENDER,
+    Category.NEGATIVE
+  ],
+  TEXT: [
+    Category.MARKETING,
+    Category.DOCS,
+    Category.DETAILS
+  ],
+  CODE: [
+    Category.CODE_TOOL,
+    Category.DETAILS
+  ]
+};
+
+// Expanded and structured subcategories for better filtering (Title Case)
+export const SUBCATEGORIES_MAP: Record<string, string[]> = {
   [Category.VEGETATION]: [
-    'Árboles (Olivo/Pino)', 
-    'Palmeras / Tropical', 
-    'Arbustos / Setos', 
-    'Césped / Pradera', 
-    'Plantas Ornamentales (Flores)', 
-    'Jardín Vertical / Trepadoras'
+    'Árboles (Olivos y Pinos)',
+    'Palmeras y Clima Tropical',
+    'Arbustos y Setos',
+    'Césped y Praderas',
+    'Plantas Ornamentales y Flores',
+    'Jardines Verticales y Trepadoras'
   ],
   [Category.PEOPLE]: [
-    'Expresiones Faciales (Primer Plano)', 
-    'Lifestyle / Ocio', 
-    'Caminando / En Movimiento', 
-    'Niños y Familias', 
-    'Siluetas / Distancia', 
-    'Business / Formal'
+    'Expresiones Faciales y Primer Plano',
+    'Lifestyle y Ocio',
+    'Caminando y en Movimiento',
+    'Niños y Familias',
+    'Siluetas y Distancia',
+    'Entorno Business y Formal'
   ],
   [Category.MATERIALS]: [
-    'Estuco / Cal (Fachadas)', 
-    'Hormigón Visto', 
-    'Piedra Natural', 
-    'Madera (Deck/Pérgolas)', 
-    'Cerámica / Azulejo Andaluz', 
-    'Vidrio / Acero',
-    'Agua (Piscinas/Fuentes)'
+    'Estuco y Cal para Fachadas',
+    'Hormigón Visto',
+    'Piedra Natural',
+    'Madera (Deck y Pérgolas)',
+    'Cerámica y Azulejo Andaluz',
+    'Vidrio y Acero',
+    'Agua (Piscinas y Fuentes)'
   ],
   [Category.LIGHTING]: [
-    'Golden Hour (Atardecer/Amanecer)', 
-    'Luz Dura (Mediodía)', 
-    'Hora Azul (Crepúsculo)', 
-    'Nublado / Difuso', 
-    'Iluminación Artificial / Nocturna',
+    'Golden Hour (Atardecer y Amanecer)',
+    'Luz Dura de Mediodía',
+    'Hora Azul y Crepúsculo',
+    'Cielo Nublado y Luz Difusa',
+    'Iluminación Artificial y Nocturna',
     'Sombras Proyectadas'
   ],
   [Category.ARCH_STYLE]: [
-    'Exteriores Residenciales', 
-    'Interiores (Salón/Cocina)', 
-    'Vistas Aéreas (Dron)', 
+    'Exteriores Residenciales',
+    'Interiores (Salón y Cocina)',
+    'Vistas Aéreas con Dron',
     'Patios Andaluces',
     'Porches y Terrazas'
   ],
   [Category.DETAILS]: [
-    'Mobiliario Exterior', 
-    'Texturas Macro', 
-    'Coches de Lujo', 
-    'Decoración / Props',
-    'Imperfecciones / Desgaste'
+    'Mobiliario Exterior',
+    'Texturas Macro',
+    'Coches de Lujo',
+    'Decoración y Props',
+    'Imperfecciones y Desgaste'
   ],
   [Category.CAMERA]: [
     'Ángulos y Perspectiva',
     'Lentes y Distancia Focal',
     'Profundidad de Campo (Bokeh)',
-    'Aéreas y Dron'
+    'Tomas Aéreas y Dron'
   ],
-  // NEW RESTORED CATEGORIES
   [Category.NEGATIVE]: [
-    'General / Calidad',
+    'General y Calidad',
     'Defectos Geométricos',
-    'Elementos Indeseados (Coches/Gente)',
+    'Elementos Indeseados',
     'Texto y Marcas de Agua'
   ],
   [Category.RENDER]: [
-    'Ajustes de Motor (V-Ray/Corona)',
-    'Post-Producción / Look',
-    'Image-to-Image / Refinamiento',
-    'Upscaling / Detalles'
+    'Ajustes de Motor (V-Ray y Corona)',
+    'Post-Producción y Look Final',
+    'Image-to-Image y Refinamiento',
+    'Upscaling y Micro Detalles'
+  ],
+  [Category.MARKETING]: [
+    'Posts para Instagram y LinkedIn',
+    'Anuncios y Copywriting Persuasivo',
+    'Artículos de Blog y SEO',
+    'Newsletters y Campañas de Email'
+  ],
+  [Category.DOCS]: [
+    'Memorias de Proyecto',
+    'Fichas Técnicas de Venta',
+    'Descripción de Viviendas',
+    'Informes y Reportes'
+  ],
+  [Category.CODE_TOOL]: [
+    'Scripts para Blender y 3D',
+    'Automatización de Archivos',
+    'Hooks y Componentes de React',
+    'Integraciones con IA y API'
   ]
 };
 
@@ -231,7 +287,7 @@ export const SEED_PROMPTS: PromptItem[] = [
     isFavorite: true,
     lastModified: Date.now(),
   },
-  
+
   // =================================================================================================
   // CATEGORY: NEGATIVE (RESTORED & PERSISTENT)
   // =================================================================================================
