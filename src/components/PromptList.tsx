@@ -313,8 +313,8 @@ export const PromptList: React.FC<PromptListProps> = ({
             onMouseLeave={() => setHoveredDropdown(null)}
           >
             <button className={`w-full flex items-center justify-between gap-1 px-2 py-1 rounded border text-xs transition-colors ${filter.category !== 'All'
-                ? 'bg-accent-600/20 border-accent-500 text-accent-300'
-                : 'bg-arch-900 border-arch-700 text-arch-300 hover:border-arch-500'
+              ? 'bg-accent-600/20 border-accent-500 text-accent-300'
+              : 'bg-arch-900 border-arch-700 text-arch-300 hover:border-arch-500'
               }`}>
               <span className="truncate">
                 {filter.category === 'All'
@@ -326,7 +326,7 @@ export const PromptList: React.FC<PromptListProps> = ({
             </button>
 
             {hoveredDropdown === 'category' && (
-              <div className="absolute top-full left-0 right-0 mt-0.5 z-50 bg-arch-800 border border-arch-600 rounded-md shadow-xl py-1 max-h-64 overflow-y-auto no-scrollbar">
+              <div className="absolute top-full left-0 right-0 z-50 bg-arch-800 border border-arch-600 rounded-md shadow-xl py-1 max-h-64 overflow-y-auto no-scrollbar">
                 <button
                   onMouseDown={() => { setFilter(prev => ({ ...prev, category: 'All', subcategory: 'All' })); setHoveredDropdown(null); }}
                   className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${filter.category === 'All' ? 'text-accent-400 bg-accent-500/10' : 'text-arch-400 hover:bg-arch-700 hover:text-white'
@@ -357,8 +357,8 @@ export const PromptList: React.FC<PromptListProps> = ({
               onMouseLeave={() => setHoveredDropdown(null)}
             >
               <button className={`w-full flex items-center justify-between gap-1 px-2 py-1 rounded border text-xs transition-colors ${filter.subcategory !== 'All'
-                  ? 'bg-accent-600/20 border-accent-500 text-accent-300'
-                  : 'bg-arch-900 border-arch-700 text-arch-300 hover:border-arch-500'
+                ? 'bg-accent-600/20 border-accent-500 text-accent-300'
+                : 'bg-arch-900 border-arch-700 text-arch-300 hover:border-arch-500'
                 }`}>
                 <span className="truncate">
                   {filter.subcategory === 'All' ? 'Subcategoría' : filter.subcategory}
@@ -367,7 +367,7 @@ export const PromptList: React.FC<PromptListProps> = ({
               </button>
 
               {hoveredDropdown === 'subcategory' && (
-                <div className="absolute top-full left-0 right-0 mt-0.5 z-50 bg-arch-800 border border-arch-600 rounded-md shadow-xl py-1 max-h-64 overflow-y-auto no-scrollbar">
+                <div className="absolute top-full left-0 right-0 z-50 bg-arch-800 border border-arch-600 rounded-md shadow-xl py-1 max-h-64 overflow-y-auto no-scrollbar">
                   <button
                     onMouseDown={() => { setFilter(prev => ({ ...prev, subcategory: 'All' })); setHoveredDropdown(null); }}
                     className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${filter.subcategory === 'All' ? 'text-accent-400 bg-accent-500/10' : 'text-arch-400 hover:bg-arch-700 hover:text-white'

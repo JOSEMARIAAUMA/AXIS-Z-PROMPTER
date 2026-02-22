@@ -5,17 +5,35 @@ import { INITIAL_PANEL_WIDTHS, SUBCATEGORIES_MAP, DEFAULT_APPS } from '../consta
 // --- PROMPTS ---
 
 export const getPrompts = async (): Promise<PromptItem[]> => {
-    const { data, error } = await supabase
-        .from('prompts')
-        .select('*')
-        .order('last_modified', { ascending: false });
+    let allData: any[] = [];
+    let from = 0;
+    const step = 1000;
+    let hasMore = true;
 
-    if (error) {
-        console.error('Error fetching prompts:', error);
-        return [];
+    while (hasMore) {
+        const { data, error } = await supabase
+            .from('prompts')
+            .select('*')
+            .order('last_modified', { ascending: false })
+            .range(from, from + step - 1);
+
+        if (error) {
+            console.error('Error fetching prompts:', error);
+            break; // return what we have so far
+        }
+
+        if (data && data.length > 0) {
+            allData = allData.concat(data);
+            from += step;
+            if (data.length < step) {
+                hasMore = false; // Last page
+            }
+        } else {
+            hasMore = false;
+        }
     }
 
-    return data.map((p: any) => ({
+    return allData.map((p: any) => ({
         id: p.id,
         title: p.title,
         category: p.category,

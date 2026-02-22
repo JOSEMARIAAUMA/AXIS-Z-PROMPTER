@@ -32,6 +32,7 @@ function App() {
   // State: Context / Super Category
   const [areas, setAreas] = useState<AreaInfo[]>(DEFAULT_AREAS);
   const [currentArea, setCurrentArea] = useState<AreaType>('MARKETING_PRODUCTIVIDAD');
+  const [isAreaDropdownHovered, setIsAreaDropdownHovered] = useState(false);
 
   useEffect(() => {
     setFilter(prev => ({ ...prev, category: 'All', subcategory: 'All', origin: 'All' }));
@@ -713,17 +714,33 @@ function App() {
               >
                 <Icons.LayoutGrid size={16} />
               </a>
-              <div className="relative">
-                <select
-                  value={currentArea}
-                  onChange={handleAreaChange}
-                  className="appearance-none bg-arch-900 border border-arch-700 text-xs text-white font-bold uppercase rounded-md py-1 pl-2 pr-6 focus:outline-none focus:border-accent-500 cursor-pointer hover:bg-arch-800 transition-colors"
-                >
-                  {areas.map((area: AreaInfo) => (
-                    <option key={area.id} value={area.id}>{area.label}</option>
-                  ))}
-                </select>
-                <Icons.ChevronDown size={12} className="absolute right-2 top-2 pointer-events-none text-arch-400" />
+              <div
+                className="relative"
+                onMouseEnter={() => setIsAreaDropdownHovered(true)}
+                onMouseLeave={() => setIsAreaDropdownHovered(false)}
+              >
+                <button className="flex items-center justify-between gap-1.5 bg-arch-900 border border-arch-700 text-xs text-white font-bold uppercase rounded-md py-1.5 pl-3 pr-2 focus:outline-none hover:bg-arch-800 transition-colors">
+                  <span>{areas.find(a => a.id === currentArea)?.label || currentArea}</span>
+                  <Icons.ChevronDown size={14} className="flex-shrink-0 text-arch-400" />
+                </button>
+
+                {isAreaDropdownHovered && (
+                  <div className="absolute top-full right-0 z-50 bg-arch-800 border border-arch-600 rounded-md shadow-2xl py-1 min-w-[200px] overflow-hidden">
+                    {areas.map((area: AreaInfo) => (
+                      <button
+                        key={area.id}
+                        onMouseDown={() => {
+                          handleAreaChange({ target: { value: area.id } } as any);
+                          setIsAreaDropdownHovered(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs font-bold uppercase transition-colors flex items-center gap-2 ${currentArea === area.id ? 'text-accent-300 bg-accent-500/20' : 'text-arch-300 hover:bg-arch-700 hover:text-white'
+                          }`}
+                      >
+                        {area.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           }
