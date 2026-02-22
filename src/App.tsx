@@ -867,6 +867,7 @@ function App() {
             onSelect={handleSelect}
             onSelectComposition={handleSelectComposition}
             onDeleteComposition={handleDeleteComposition}
+            onDeletePrompt={handleDelete}
             onAdd={handleAdd}
             onToggleFavorite={handleToggleFavorite}
             onAddToCompiler={handleAddToCompiler}

@@ -11,6 +11,7 @@ interface PromptListProps {
   onSelect: (id: string) => void;
   onSelectComposition: (comp: SavedComposition) => void;
   onDeleteComposition: (id: string) => void;
+  onDeletePrompt: (id: string) => void;
   onAdd: () => void;
   onToggleFavorite: (id: string, e: React.MouseEvent) => void;
   onAddToCompiler: (prompt: PromptItem) => void;
@@ -28,7 +29,7 @@ type ViewMode = 'LIBRARY' | 'FAVORITES' | 'HISTORY';
 type RepoMode = 'SNIPPETS' | 'COMPOSITIONS';
 
 export const PromptList: React.FC<PromptListProps> = ({
-  prompts, compositions, categories, selectedId, onSelect, onSelectComposition, onDeleteComposition, onAdd, onToggleFavorite, onAddToCompiler, onManageCategories, onOpenBackup, onManageApps, availableApps, filter, setFilter, currentArea, validCategories
+  prompts, compositions, categories, selectedId, onSelect, onSelectComposition, onDeleteComposition, onDeletePrompt, onAdd, onToggleFavorite, onAddToCompiler, onManageCategories, onOpenBackup, onManageApps, availableApps, filter, setFilter, currentArea, validCategories
 }) => {
 
   const [viewMode, setViewMode] = useState<ViewMode>('LIBRARY');
@@ -501,8 +502,16 @@ export const PromptList: React.FC<PromptListProps> = ({
                       ? 'text-yellow-500 hover:text-yellow-400'
                       : 'text-arch-600 hover:text-yellow-500 opacity-0 group-hover:opacity-100'
                       }`}
+                    title={prompt.isFavorite ? "Quitar de favoritos" : "Añadir a favoritos"}
                   >
                     <Icons.Star size={14} fill={prompt.isFavorite ? "currentColor" : "none"} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeletePrompt(prompt.id); }}
+                    className="p-1 rounded-full text-arch-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Eliminar"
+                  >
+                    <Icons.Trash size={14} />
                   </button>
                 </div>
 
