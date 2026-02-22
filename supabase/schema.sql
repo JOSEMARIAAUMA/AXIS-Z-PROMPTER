@@ -16,7 +16,11 @@ create table public.prompts (
   area text default 'IMAGE',
   is_favorite boolean default false,
   last_modified bigint not null,
-  user_id uuid references auth.users(id)
+  origin text, -- 'user' | 'internet'
+  rating int default 0,
+  user_id uuid references auth.users(id),
+  creator_name text,  -- initials of the creator
+  editor_name text    -- initials of the last editor
 );
 
 -- 2. Settings Table
@@ -35,7 +39,9 @@ create table public.compositions (
   categories text[] default '{}',
   apps text[] default '{}',
   area text default 'IMAGE',
-  last_modified bigint not null
+  last_modified bigint not null,
+  creator_name text,  -- initials of the creator
+  editor_name text    -- initials of the last editor
 );
 
 -- 4. Custom Categories Table

@@ -46,6 +46,8 @@ export interface PromptItem {
   isFavorite: boolean;
   lastModified: number;
   origin?: 'user' | 'internet'; // New: Data origin
+  creatorName?: string;
+  editorName?: string;
   rating?: number; // New: 0-5 stars
 }
 
@@ -100,6 +102,8 @@ export interface SavedComposition {
   apps?: string[]; // New: Tagged apps for filtering
   area?: AreaType; // New: Super Category
   lastModified: number;
+  creatorName?: string;
+  editorName?: string;
 }
 
 // Smart Sync Suggestions

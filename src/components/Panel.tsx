@@ -11,18 +11,18 @@ interface PanelProps {
   headerActions?: React.ReactNode; // New prop for header buttons
 }
 
-export const Panel: React.FC<PanelProps> = ({ 
-  title, 
-  width, 
-  children, 
-  className = '', 
+export const Panel: React.FC<PanelProps> = ({
+  title,
+  width,
+  children,
+  className = '',
   onResizeStart,
   showResizeHandle = true,
   headerActions
 }) => {
   return (
-    <div 
-      style={{ width: `${width}%` }} 
+    <div
+      style={{ width: `${width}%` }}
       className={`relative flex flex-col h-full border-r border-arch-800 bg-arch-900 ${className}`}
     >
       {/* Header */}
@@ -38,13 +38,13 @@ export const Panel: React.FC<PanelProps> = ({
       )}
 
       {/* Content - Removed overflow-hidden to allow dropdowns to spill over */}
-      <div className="flex-1 min-h-0 relative">
+      <div className="flex-1 min-h-0 relative flex flex-col">
         {children}
       </div>
 
       {/* Resize Handle */}
       {showResizeHandle && onResizeStart && (
-        <div 
+        <div
           className="absolute right-0 top-0 bottom-0 w-1 hover:w-2 bg-transparent hover:bg-accent-500 cursor-col-resize z-50 transition-all flex items-center justify-center group"
           onMouseDown={onResizeStart}
         >

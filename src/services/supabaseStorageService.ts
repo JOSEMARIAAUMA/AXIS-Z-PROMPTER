@@ -2,6 +2,23 @@ import { supabase } from '../supabaseClient';
 import { PromptItem, AppSettings, CompiledPrompt, CategoryMap, SavedComposition, AreaMapping, AreaInfo } from '../types';
 import { INITIAL_PANEL_WIDTHS, SUBCATEGORIES_MAP, DEFAULT_APPS } from '../constants';
 
+// --- USER AUTH INITALS ---
+export const getCurrentUserInitials = async (): Promise<string | undefined> => {
+    try {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session?.user) {
+            const meta = data.session.user.user_metadata;
+            let sourceStr = meta?.full_name || data.session.user.email?.split('@')[0];
+            if (!sourceStr) return undefined;
+            const parts = sourceStr.split(/[\s._-]+/);
+            return parts.slice(0, 2).map((p: string) => p[0].toUpperCase()).join('');
+        }
+    } catch (e) {
+        console.error('Error fetching user initials:', e);
+    }
+    return undefined;
+};
+
 // --- PROMPTS ---
 
 export const getPrompts = async (): Promise<PromptItem[]> => {
@@ -49,6 +66,8 @@ export const getPrompts = async (): Promise<PromptItem[]> => {
         lastModified: parseInt(p.last_modified),
         origin: p.origin as 'user' | 'internet' | undefined,
         rating: p.rating ? Number(p.rating) : undefined,
+        creatorName: p.creator_name,
+        editorName: p.editor_name,
     }));
 };
 
@@ -70,6 +89,8 @@ export const savePrompt = async (prompt: PromptItem) => {
         area: prompt.area,
         is_favorite: prompt.isFavorite,
         last_modified: prompt.lastModified,
+        creator_name: prompt.creatorName,
+        editor_name: prompt.editorName,
     };
 
     const { error } = await supabase.from('prompts').upsert(row);
@@ -193,7 +214,9 @@ export const getSavedCompositions = async (): Promise<SavedComposition[]> => {
         categories: c.categories || [],
         apps: c.apps || [],
         area: c.area || 'IMAGE',
-        lastModified: parseInt(c.last_modified)
+        lastModified: parseInt(c.last_modified),
+        creatorName: c.creator_name,
+        editorName: c.editor_name,
     }));
 };
 
@@ -205,9 +228,13 @@ export const saveComposition = async (comp: SavedComposition) => {
         categories: comp.categories,
         apps: comp.apps,
         area: comp.area,
-        last_modified: comp.lastModified
+        last_modified: comp.lastModified,
+        creator_name: comp.creatorName,
+        editor_name: comp.editorName,
     };
-    await supabase.from('compositions').upsert(row);
+
+    const { error } = await supabase.from('compositions').upsert(row);
+    if (error) console.error('Error saving composition:', error);
 };
 
 export const deleteComposition = async (id: string) => {

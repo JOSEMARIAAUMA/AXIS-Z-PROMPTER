@@ -111,6 +111,11 @@ export const AREA_CONFIG: Record<AreaType, any> = {
   }
 };
 
+// Safe accessor: fallback to TEXT config for dynamic/user-created areas
+export const getAreaConfig = (area: AreaType) => {
+  return AREA_CONFIG[area] || AREA_CONFIG.TEXT;
+};
+
 export const DEFAULT_APPS = AREA_CONFIG.IMAGE.apps; // Fallback
 
 // Hierarchical Mapping: Area -> Categories

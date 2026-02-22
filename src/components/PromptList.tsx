@@ -63,7 +63,7 @@ export const PromptList: React.FC<PromptListProps> = ({
   }, [validCategories, currentArea, areaPrompts]);
 
   // 3. Calculate prompt counts per category (scoped to current area and other filters)
-  const categoryCounts = useMemo(() => {
+  const snippetCategoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     let list = areaPrompts;
 
@@ -89,6 +89,44 @@ export const PromptList: React.FC<PromptListProps> = ({
     });
     return counts;
   }, [areaPrompts, filter.search, filter.app, filter.rating, filter.origin]);
+
+  // 3b. Calculate composition counts per category (independent from snippets)
+  const compositionCategoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let list = areaCompositions;
+
+    if (filter.search) {
+      const searchLower = filter.search.toLowerCase();
+      list = list.filter(c => c.title.toLowerCase().includes(searchLower));
+    }
+    if (filter.app !== 'All') {
+      list = list.filter(c => c.apps && c.apps.includes(filter.app));
+    }
+
+    list.forEach(c => {
+      if (c.categories && c.categories.length > 0) {
+        const cat = c.categories[0];
+        counts[cat] = (counts[cat] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [areaCompositions, filter.search, filter.app]);
+
+  // Derived: pick the right counts based on mode
+  const categoryCounts = repoMode === 'SNIPPETS' ? snippetCategoryCounts : compositionCategoryCounts;
+
+  // Derived: categories to show in dropdown based on mode
+  const compositionCategoriesToShow = useMemo(() => {
+    const cats = new Set<string>();
+    areaCompositions.forEach(c => {
+      if (c.categories && c.categories.length > 0) {
+        cats.add(c.categories[0]);
+      }
+    });
+    return Array.from(cats).sort();
+  }, [areaCompositions]);
+
+  const activeCategoriesToShow = repoMode === 'SNIPPETS' ? categoriesToShow : compositionCategoriesToShow;
 
   const getFilteredItems = () => {
     // Mode: SNIPPETS
@@ -149,6 +187,10 @@ export const PromptList: React.FC<PromptListProps> = ({
 
       if (filter.category !== 'All') {
         list = list.filter(c => c.categories && c.categories.includes(filter.category));
+      }
+
+      if (filter.subcategory !== 'All') {
+        list = list.filter(c => c.categories && c.categories.includes(filter.subcategory));
       }
 
       return list;
@@ -334,7 +376,7 @@ export const PromptList: React.FC<PromptListProps> = ({
                 >
                   — Todas las categorías
                 </button>
-                {categoriesToShow.map(cat => (
+                {activeCategoriesToShow.map(cat => (
                   <button
                     key={cat}
                     onMouseDown={() => { setFilter(prev => ({ ...prev, category: cat, subcategory: 'All' })); setHoveredDropdown(null); }}
@@ -349,7 +391,7 @@ export const PromptList: React.FC<PromptListProps> = ({
             )}
           </div>
 
-          {/* Subcategory hover dropdown — only when category is selected and has subcategories */}
+          {/* Subcategory hover dropdown — same logic for SNIPPETS and COMPOSITIONS */}
           {filter.category !== 'All' && subcategoryOptions.length > 0 && (
             <div
               className="relative flex-1"

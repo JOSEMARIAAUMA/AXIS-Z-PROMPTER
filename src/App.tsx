@@ -15,7 +15,7 @@ import * as storage from './services/supabaseStorageService';
 import * as localStorageFromService from './services/storageService';
 import { PromptItem, AppSettings, FilterState, CompiledPrompt, CategoryMap, SavedComposition, LibrarySuggestion, AreaType, AreaMapping } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { DEFAULT_AREAS, AREA_CONFIG, INITIAL_PANEL_WIDTHS, AREA_CATEGORIES } from './constants';
+import { DEFAULT_AREAS, getAreaConfig, INITIAL_PANEL_WIDTHS, AREA_CATEGORIES } from './constants';
 import { AreaInfo } from './types';
 
 type RightPanelTab = 'REFERENCES' | 'COMPILER';
@@ -28,6 +28,7 @@ function App() {
   const [areaMapping, setAreaMapping] = useState<AreaMapping>({});
   const [appList, setAppList] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [currentUserInitials, setCurrentUserInitials] = useState<string | undefined>(undefined);
 
   // State: Context / Super Category
   const [areas, setAreas] = useState<AreaInfo[]>(DEFAULT_AREAS);
@@ -67,12 +68,15 @@ function App() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [loadedPrompts, catsData, loadedSettings, loadedApps, loadedComps] = await Promise.all([
+        const initials = await storage.getCurrentUserInitials();
+        setCurrentUserInitials(initials);
+
+        const [loadedSettings, loadedPrompts, catsData, loadedCompositions, loadedAppLists] = await Promise.all([
+          storage.getSettings(),
           storage.getPrompts(),
           storage.getCustomCategories(),
-          storage.getSettings(),
-          storage.getAppLists(),
-          storage.getSavedCompositions()
+          storage.getSavedCompositions(),
+          storage.getAppLists()
         ]);
 
         const loadedCats = catsData.map;
@@ -84,8 +88,8 @@ function App() {
         setCategories(loadedCats);
         setAreaMapping(loadedAreaMapping);
         setAreas(loadedAreas);
-        setAppList(loadedApps);
-        setCompositions(loadedComps);
+        setAppList(loadedAppLists);
+        setCompositions(loadedCompositions);
 
         // Category Reconciliation: Ensure all categories found in prompts are in the manager
         const foundCategories = new Set<string>();
@@ -210,21 +214,96 @@ function App() {
     await storage.saveCustomCategories(categories, areaMapping, nextAreas);
   }, [areas, categories, areaMapping]);
 
-  const handleDeleteArea = useCallback(async (areaId: string) => {
-    const nextAreas = areas.filter(a => a.id !== areaId);
-    setAreas(nextAreas);
-    // Note: Categories mapped to this area will stay but areaMapping will be orphan
-    // We optionally move them to 'GLOBAL' or 'TEXT'
-    const nextMapping = { ...areaMapping };
-    Object.keys(nextMapping).forEach(cat => {
-      if (nextMapping[cat]?.includes(areaId)) {
-        nextMapping[cat] = nextMapping[cat].filter(id => id !== areaId);
-        if (nextMapping[cat].length === 0) nextMapping[cat] = ['TEXT'];
+  const handleHierarchyDelete = useCallback(async (
+    target: { type: 'AREA' | 'CATEGORY' | 'SUBCATEGORY'; id: string; parentId?: string },
+    action: 'MOVE' | 'DELETE',
+    newTarget?: { area?: string; category?: string; subcategory?: string }
+  ) => {
+    // 1. Prompts Cleanup
+    let updatedPrompts = [...prompts];
+    let promptsToSave: PromptItem[] = [];
+    let promptsToDelete: string[] = [];
+
+    if (action === 'MOVE' && newTarget) {
+      // const allPromptsAppKeys = new Set(prompts.flatMap(p => p.apps || [])); // This line was likely misplaced
+      updatedPrompts = updatedPrompts.map(p => {
+        let shouldUpdate = false;
+        let pNew = { ...p, lastModified: Date.now() };
+
+        if (target.type === 'AREA' && p.area === target.id) {
+          pNew.area = newTarget.area!;
+          // if category mapping doesn't match new area, auto assign new category/sub
+          if (!areaMapping[pNew.category]?.includes(pNew.area)) {
+            pNew.category = newTarget.category!;
+            pNew.subcategory = newTarget.subcategory!;
+          }
+          shouldUpdate = true;
+        } else if (target.type === 'CATEGORY' && p.category === target.id) {
+          pNew.category = newTarget.category!;
+          pNew.subcategory = newTarget.subcategory!;
+          if (newTarget.area && (!areaMapping[pNew.category]?.includes(pNew.area as string))) {
+            pNew.area = newTarget.area;
+          }
+          shouldUpdate = true;
+        } else if (target.type === 'SUBCATEGORY' && p.category === target.parentId && p.subcategory === target.id) {
+          pNew.subcategory = newTarget.subcategory!;
+          shouldUpdate = true;
+        }
+
+        if (shouldUpdate) promptsToSave.push(pNew);
+        return shouldUpdate ? pNew : p;
+      });
+    } else if (action === 'DELETE') {
+      const pToDeleteIds = prompts.filter(p => {
+        if (target.type === 'AREA') return p.area === target.id;
+        if (target.type === 'CATEGORY') return p.category === target.id;
+        if (target.type === 'SUBCATEGORY') return p.category === target.parentId && p.subcategory === target.id;
+        return false;
+      }).map(p => p.id);
+
+      promptsToDelete = pToDeleteIds;
+      updatedPrompts = updatedPrompts.filter(p => !promptsToDelete.includes(p.id));
+    }
+
+    setPrompts(updatedPrompts);
+
+    for (const p of promptsToSave) await storage.savePrompt(p);
+    for (const id of promptsToDelete) await storage.deletePrompt(id);
+
+    // 2. Hierarchy Cleanup
+    let nextAreas = [...areas];
+    let nextCats = { ...categories };
+    let nextMapping = { ...areaMapping };
+
+    if (target.type === 'AREA') {
+      nextAreas = nextAreas.filter(a => a.id !== target.id);
+      Object.keys(nextMapping).forEach(cat => {
+        if (nextMapping[cat].includes(target.id)) {
+          nextMapping[cat] = nextMapping[cat].filter(id => id !== target.id);
+          if (nextMapping[cat].length === 0) {
+            if (action === 'MOVE' && newTarget?.area) {
+              nextMapping[cat] = [newTarget.area];
+            } else {
+              delete nextCats[cat];
+              delete nextMapping[cat];
+            }
+          }
+        }
+      });
+    } else if (target.type === 'CATEGORY') {
+      delete nextCats[target.id];
+      delete nextMapping[target.id];
+    } else if (target.type === 'SUBCATEGORY' && target.parentId) {
+      if (nextCats[target.parentId]) {
+        nextCats[target.parentId] = nextCats[target.parentId].filter(s => s !== target.id);
       }
-    });
+    }
+
+    setAreas(nextAreas);
+    setCategories(nextCats);
     setAreaMapping(nextMapping);
-    await storage.saveCustomCategories(categories, nextMapping, nextAreas);
-  }, [areas, categories, areaMapping]);
+    await storage.saveCustomCategories(nextCats, nextMapping, nextAreas);
+  }, [areas, categories, areaMapping, prompts]);
 
   const handleUpdateArea = useCallback(async (updatedArea: AreaInfo) => {
     const nextAreas = areas.map(a => a.id === updatedArea.id ? updatedArea : a);
@@ -282,6 +361,8 @@ function App() {
       area: currentArea, // Assign current area
       isFavorite: false,
       lastModified: Date.now(),
+      creatorName: currentUserInitials,
+      editorName: currentUserInitials
     };
 
     // Optimistic UI Update
@@ -292,13 +373,12 @@ function App() {
     await storage.savePrompt(newPrompt);
   };
 
-  const handleSave = async (updated: PromptItem) => {
-    // Optimistic UI Update using functional update to ensure we have latest version
-    setPrompts(prev => prev.map(p => p.id === updated.id ? updated : p));
-
-    // Async Save
+  const handleSave = async (updatedPrompt: PromptItem) => {
+    const promptWithEditor = { ...updatedPrompt, editorName: currentUserInitials, lastModified: Date.now() };
+    setPrompts(prev => prev.map(p => p.id === updatedPrompt.id ? promptWithEditor : p));
+    // Persist to Supabase
     try {
-      await storage.savePrompt(updated);
+      await storage.savePrompt(promptWithEditor);
     } catch (err) {
       console.error("Save failed, reverting UI:", err);
       // Optional: Revert UI or show error
@@ -318,13 +398,15 @@ function App() {
       ...prompt,
       id: uuidv4(),
       title: `${prompt.title} (Copia)`,
-      lastModified: Date.now()
+      lastModified: Date.now(),
+      creatorName: currentUserInitials,
+      editorName: currentUserInitials
     };
 
     setPrompts(prev => [newPrompt, ...prev]);
     setSelectedId(newPrompt.id);
     await storage.savePrompt(newPrompt);
-  }, []);
+  }, [currentUserInitials]);
 
   const handleUpdateImages = async (images: string[]) => {
     if (selectedId) {
@@ -423,7 +505,7 @@ function App() {
   };
 
   // --- COMPOSITION LOGIC ---
-  const handleSaveComposition = (title: string, cats: string[], taggedApps: string[]) => {
+  const handleSaveComposition = async (title: string, cats: string[], taggedApps: string[]) => {
     const newId = uuidv4();
     const newComp: SavedComposition = {
       id: newId,
@@ -432,27 +514,40 @@ function App() {
       categories: cats,
       apps: taggedApps,
       area: currentArea, // Save with current area
-      lastModified: Date.now()
+      lastModified: Date.now(),
+      creatorName: currentUserInitials,
+      editorName: currentUserInitials
     };
     setCompositions([newComp, ...compositions]);
     // After saving as new, we are now editing this new one
     setActiveCompositionId(newId);
+    // Persist to Supabase
+    await storage.saveComposition(newComp);
   };
 
-  const handleUpdateComposition = (data: CompiledPrompt) => {
+  const handleUpdateComposition = async (data: CompiledPrompt, title?: string, cats?: string[]) => {
     if (!activeCompositionId) return;
 
+    let updatedComp: SavedComposition | null = null;
     setCompositions(prev => prev.map(c => {
       if (c.id === activeCompositionId) {
-        return {
+        updatedComp = {
           ...c,
           data: { ...data },
+          title: title || c.title,
+          categories: cats || c.categories,
           apps: data.apps || c.apps, // Update top level apps if changed
-          lastModified: Date.now()
+          lastModified: Date.now(),
+          editorName: currentUserInitials
         };
+        return updatedComp;
       }
       return c;
     }));
+    // Persist to Supabase
+    if (updatedComp) {
+      await storage.saveComposition(updatedComp);
+    }
   };
 
   const handleSelectComposition = (comp: SavedComposition) => {
@@ -462,18 +557,20 @@ function App() {
     setRightTab('COMPILER');
   };
 
-  const handleDeleteComposition = (id: string) => {
+  const handleDeleteComposition = async (id: string) => {
     if (window.confirm("¿Eliminar composición guardada?")) {
       setCompositions(prev => prev.filter(c => c.id !== id));
       if (activeCompositionId === id) {
         setActiveCompositionId(null);
       }
+      // Persist deletion to Supabase
+      await storage.deleteComposition(id);
     }
   };
 
   // Fixed: handleClearCompiler now properly resets fields to area-specific defaults
   const handleClearCompiler = () => {
-    const defaults = AREA_CONFIG[currentArea].defaultTemplate;
+    const defaults = getAreaConfig(currentArea).defaultTemplate;
     setCompiledPrompt({
       system: "",
       role: defaults.role,
@@ -552,7 +649,9 @@ function App() {
         apps: [],
         area: currentArea, // Smart sync saves to current area
         isFavorite: false,
-        lastModified: Date.now()
+        lastModified: Date.now(),
+        creatorName: currentUserInitials,
+        editorName: currentUserInitials
       };
       setPrompts([newPrompt, ...prompts]);
       setSelectedId(newPrompt.id); // Highlight it
@@ -564,7 +663,8 @@ function App() {
             ...p,
             contentEn: suggestion.contentEn,
             contentEs: suggestion.contentEs, // Optionally update Spanish too
-            lastModified: Date.now()
+            lastModified: Date.now(),
+            editorName: currentUserInitials
           };
         }
         return p;
@@ -582,7 +682,7 @@ function App() {
       }
     } else {
       const defaultCat = Object.keys(categories)[0] || 'General';
-      const newPrompt: PromptItem = {
+      const newItem: PromptItem = {
         id: uuidv4(),
         title: 'Prompt Generado por IA',
         category: defaultCat,
@@ -594,10 +694,13 @@ function App() {
         apps: [],
         area: currentArea,
         isFavorite: false,
-        lastModified: Date.now()
+        lastModified: Date.now(),
+        origin: 'user',
+        creatorName: currentUserInitials,
+        editorName: currentUserInitials
       };
-      setPrompts([newPrompt, ...prompts]);
-      setSelectedId(newPrompt.id);
+      setPrompts([newItem, ...prompts]);
+      setSelectedId(newItem.id);
     }
   };
 
@@ -834,6 +937,7 @@ function App() {
               <PromptCompiler
                 compiler={compiledPrompt}
                 activeCompositionId={activeCompositionId}
+                activeComposition={compositions.find(c => c.id === activeCompositionId) || null}
                 onChange={setCompiledPrompt}
                 onClear={handleClearCompiler}
                 onSaveToLibrary={handleSaveComposition}
@@ -869,13 +973,14 @@ function App() {
         onClose={() => setIsCategoryManagerOpen(false)}
         categories={categories}
         areaMapping={areaMapping}
+        prompts={prompts}
+        areas={areas}
         onUpdate={handleUpdateCategories}
         onRenameCategory={handleRenameCategory}
         onRenameSubcategory={handleRenameSubcategory}
-        areas={areas}
         onAddArea={handleAddArea}
         onRenameArea={handleUpdateArea}
-        onDeleteArea={handleDeleteArea}
+        onHierarchyDelete={handleHierarchyDelete}
       />
 
       <AppManagerModal

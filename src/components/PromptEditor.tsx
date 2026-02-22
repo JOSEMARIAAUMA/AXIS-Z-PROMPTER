@@ -280,8 +280,12 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   }`}
               >
                 {edited.origin === 'internet' ? <Icons.Globe size={14} /> : <Icons.User size={14} />}
-                <span className="text-xs font-medium uppercase tracking-tight">
-                  {edited.origin === 'internet' ? 'Web' : 'User'}
+                <span className="text-[10px] font-medium uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                  {edited.creatorName
+                    ? (edited.editorName && edited.editorName !== edited.creatorName
+                      ? `${edited.creatorName} → ${edited.editorName}`
+                      : edited.creatorName)
+                    : (edited.origin === 'internet' ? 'Web' : 'User')}
                 </span>
               </button>
             </div>
