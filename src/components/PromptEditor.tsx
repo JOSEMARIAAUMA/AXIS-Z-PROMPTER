@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PromptItem, CategoryMap, AreaInfo, AreaMapping } from '../types';
 import { Icons } from './Icon';
-import { generateTranslationAndTags, improvePrompt } from '../services/geminiService';
+import { generateTranslationAndTags, improvePrompt, analyzeImage } from '../services/geminiService';
 import { PromptHistory } from './PromptHistory';
 import { toast } from 'react-hot-toast';
 
@@ -24,6 +24,11 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   const [isTranslating, setIsTranslating] = useState<'es' | 'en' | null>(null);
   const [isImproving, setIsImproving] = useState(false);
   const [activeTab, setActiveTab] = useState<'editor' | 'history'>('editor');
+
+  // Vision-to-Prompt state
+  const [visionPreview, setVisionPreview] = useState<string | null>(null);
+  const [isAnalyzingVision, setIsAnalyzingVision] = useState(false);
+  const visionInputRef = React.useRef<HTMLInputElement>(null);
 
   const translateAbortController = React.useRef<AbortController | null>(null);
   const improveAbortController = React.useRef<AbortController | null>(null);
@@ -172,6 +177,42 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       setActiveTab('editor');
     }
   };
+
+  // ── VISION-TO-PROMPT ─────────────────────────────────────────────────────────
+  const handleVisionFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setVisionPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+    // Reset so same file can be picked again
+    e.target.value = '';
+  };
+
+  const handleVisionAnalyze = async () => {
+    if (!edited || !visionPreview) return;
+    setIsAnalyzingVision(true);
+    const toastId = toast.loading('Analizando imagen con IA...');
+    try {
+      const result = await analyzeImage(
+        visionPreview,
+        'Describe in detail: materials, lighting, atmosphere, camera angle, vegetation, and any unique stylistic features for an architectural AI prompt.'
+      );
+      // Append description to the English prompt
+      setEdited(prev => prev ? ({
+        ...prev,
+        contentEn: prev.contentEn ? `${prev.contentEn}\n\n[Vision Analysis]\n${result}` : result,
+        lastModified: Date.now()
+      }) : null);
+      toast.success('Análisis de imagen completado', { id: toastId });
+    } catch (err: any) {
+      console.error('Vision analysis failed', err);
+      toast.error('Error al analizar la imagen: ' + (err.message || 'desconocido'), { id: toastId });
+    } finally {
+      setIsAnalyzingVision(false);
+    }
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="h-full flex flex-col bg-arch-900">
@@ -466,6 +507,80 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
               className="w-full bg-transparent border-0 text-arch-100 font-mono text-sm placeholder-arch-600 focus:ring-0 resize-none leading-relaxed"
               placeholder="Technical prompt for AI..."
             />
+          </div>
+
+          {/* ── VISION-TO-PROMPT SECTION ─────────────────────────────── */}
+          <div className="bg-arch-950/50 p-4 rounded-lg border border-purple-900/40">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <Icons.Image size={14} className="text-purple-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-purple-300">Vision-to-Prompt</span>
+                <span className="text-[10px] text-arch-500">· Analiza una imagen y genera contexto</span>
+              </div>
+              {visionPreview && (
+                <button
+                  onClick={() => setVisionPreview(null)}
+                  className="text-[10px] text-arch-500 hover:text-red-400 transition-colors"
+                  title="Quitar imagen"
+                >
+                  <Icons.X size={12} />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-start gap-3">
+              {/* Thumbnail preview */}
+              {visionPreview ? (
+                <img
+                  src={visionPreview}
+                  alt="Preview"
+                  className="w-20 h-20 object-cover rounded-md border border-purple-800/60 shrink-0"
+                />
+              ) : (
+                <button
+                  onClick={() => visionInputRef.current?.click()}
+                  className="w-20 h-20 flex flex-col items-center justify-center gap-1 border border-dashed border-purple-800/60 rounded-md text-purple-600 hover:border-purple-500 hover:text-purple-400 transition-colors shrink-0"
+                >
+                  <Icons.Plus size={20} />
+                  <span className="text-[9px] uppercase">Imagen</span>
+                </button>
+              )}
+
+              <div className="flex flex-col gap-2 flex-1">
+                <input
+                  ref={visionInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleVisionFileChange}
+                />
+                {visionPreview ? (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => visionInputRef.current?.click()}
+                      className="text-[10px] text-arch-500 hover:text-arch-300 text-left transition-colors"
+                    >
+                      ↩ Cambiar imagen
+                    </button>
+                    <button
+                      onClick={handleVisionAnalyze}
+                      disabled={isAnalyzingVision}
+                      className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all disabled:opacity-60 ${isAnalyzingVision
+                          ? 'bg-purple-900/60 text-purple-300 animate-pulse'
+                          : 'bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white shadow-lg shadow-purple-900/30'
+                        }`}
+                    >
+                      <Icons.Brain size={12} />
+                      <span>{isAnalyzingVision ? 'Analizando...' : 'Analizar con IA'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-arch-600 leading-relaxed">
+                    Sube una imagen de referencia y la IA generará automáticamente una descripción detallada del estilo, materiales, luz y composición para enriquecer tu prompt en inglés.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Tags Section */}

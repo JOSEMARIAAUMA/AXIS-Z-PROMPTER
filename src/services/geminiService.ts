@@ -1,6 +1,20 @@
 import { supabase } from '../supabaseClient';
 import { PromptItem, CompiledPrompt, LibrarySuggestion } from "../types";
 
+// ─── SESSION CACHE ────────────────────────────────────────────────────────────
+// In-memory cache keyed by a hash of (modelName + serialised requestData).
+// Lives for the current browser session; avoids redundant Edge Function calls.
+const _aiCache = new Map<string, string>();
+
+const _cacheKey = (modelName: string, requestData: any): string => {
+    // Use a simple deterministic JSON string as key (ignore AbortSignal)
+    try { return `${modelName}::${JSON.stringify(requestData)}`; }
+    catch { return `${modelName}::${String(requestData)}`; }
+};
+
+export const clearAICache = () => _aiCache.clear();
+// ─────────────────────────────────────────────────────────────────────────────
+
 const withAbort = <T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> => {
     if (!signal) return promise;
     if (signal.aborted) return Promise.reject(new Error("AbortError"));
@@ -16,6 +30,13 @@ const withAbort = <T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> => 
 };
 
 const invokeGemini = async (modelName: string, requestData: any, signal?: AbortSignal): Promise<any> => {
+    // Check cache first (skip for AbortSignal-bound calls to keep cancellation working)
+    const key = _cacheKey(modelName, requestData);
+    if (_aiCache.has(key)) {
+        console.debug('[AI Cache] HIT', key.substring(0, 80));
+        return _aiCache.get(key)!;
+    }
+
     const invokePromise = supabase.functions.invoke('gemini-proxy', {
         body: { modelName, requestData }
     });
@@ -29,7 +50,9 @@ const invokeGemini = async (modelName: string, requestData: any, signal?: AbortS
     if (!data || !data.text) {
         throw new Error("Invalid response from gemini-proxy");
     }
-    
+
+    // Store in cache (only if not aborted)
+    _aiCache.set(key, data.text);
     return data.text;
 };
 

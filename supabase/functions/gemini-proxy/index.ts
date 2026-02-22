@@ -26,7 +26,16 @@ serve(async (req) => {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
     const model = genAI.getGenerativeModel({ model: modelName })
 
-    const result = await model.generateContent(requestData)
+    // Support both raw parts arrays (for vision/multimodal) and structured {contents} objects
+    let result
+    if (Array.isArray(requestData)) {
+      // Vision mode: requestData is an array of parts (text + inlineData)
+      result = await model.generateContent(requestData)
+    } else {
+      // Standard mode: requestData is a GenerateContentRequest object
+      result = await model.generateContent(requestData)
+    }
+
     const response = await result.response
     const text = response.text()
 

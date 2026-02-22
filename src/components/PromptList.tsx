@@ -12,6 +12,7 @@ interface PromptListProps {
   onSelectComposition: (comp: SavedComposition) => void;
   onDeleteComposition: (id: string) => void;
   onDeletePrompt: (id: string) => void;
+  onBatchDelete: (ids: string[]) => void;
   onAdd: () => void;
   onToggleFavorite: (id: string, e: React.MouseEvent) => void;
   onAddToCompiler: (prompt: PromptItem) => void;
@@ -29,8 +30,10 @@ type ViewMode = 'LIBRARY' | 'FAVORITES' | 'HISTORY';
 type RepoMode = 'SNIPPETS' | 'COMPOSITIONS';
 
 export const PromptList: React.FC<PromptListProps> = ({
-  prompts, compositions, categories, selectedId, onSelect, onSelectComposition, onDeleteComposition, onDeletePrompt, onAdd, onToggleFavorite, onAddToCompiler, onManageCategories, onOpenBackup, onManageApps, availableApps, filter, setFilter, currentArea, validCategories
+  prompts, compositions, categories, selectedId, onSelect, onSelectComposition, onDeleteComposition, onDeletePrompt, onBatchDelete, onAdd, onToggleFavorite, onAddToCompiler, onManageCategories, onOpenBackup, onManageApps, availableApps, filter, setFilter, currentArea, validCategories
 }) => {
+  const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
+  const [isBatchMode, setIsBatchMode] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>('LIBRARY');
   const [repoMode, setRepoMode] = useState<RepoMode>('SNIPPETS');
@@ -461,31 +464,108 @@ export const PromptList: React.FC<PromptListProps> = ({
         {repoMode === 'SNIPPETS' && (
           <>
             {viewMode === 'LIBRARY' && (
-              <button
-                onClick={onAdd}
-                className="w-full flex items-center justify-center space-x-2 p-3 rounded-lg border border-dashed border-arch-700 text-arch-400 hover:border-accent-500 hover:text-accent-500 hover:bg-arch-800/50 transition-all group"
-              >
-                <Icons.Plus size={18} />
-                <span className="text-sm font-medium">Nuevo Prompt ({currentArea})</span>
-              </button>
+              <>
+                {/* BATCH ACTION BAR */}
+                {isBatchMode && (
+                  <div className="flex items-center justify-between bg-amber-950/50 border border-amber-800/60 rounded-lg px-3 py-2 mb-1">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={batchSelected.size === (displayedItems as PromptItem[]).length && batchSelected.size > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setBatchSelected(new Set((displayedItems as PromptItem[]).map(p => p.id)));
+                          } else {
+                            setBatchSelected(new Set());
+                          }
+                        }}
+                        className="accent-amber-500 cursor-pointer"
+                      />
+                      <span className="text-[11px] text-amber-300 font-medium">
+                        {batchSelected.size > 0 ? `${batchSelected.size} seleccionados` : 'Seleccionar todos'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {batchSelected.size > 0 && (
+                        <button
+                          onClick={() => {
+                            onBatchDelete(Array.from(batchSelected));
+                            setBatchSelected(new Set());
+                            setIsBatchMode(false);
+                          }}
+                          className="flex items-center space-x-1 px-2 py-1 rounded bg-red-900/60 hover:bg-red-800 text-red-300 text-[10px] font-bold uppercase transition-colors"
+                          title="Eliminar seleccionados"
+                        >
+                          <Icons.Trash size={10} />
+                          <span>Eliminar ({batchSelected.size})</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { setIsBatchMode(false); setBatchSelected(new Set()); }}
+                        className="px-2 py-1 text-[10px] text-arch-400 hover:text-white transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={onAdd}
+                  className="w-full flex items-center justify-center space-x-2 p-3 rounded-lg border border-dashed border-arch-700 text-arch-400 hover:border-accent-500 hover:text-accent-500 hover:bg-arch-800/50 transition-all group"
+                >
+                  <Icons.Plus size={18} />
+                  <span className="text-sm font-medium">Nuevo Prompt ({currentArea})</span>
+                </button>
+              </>
             )}
 
             {(displayedItems as PromptItem[]).map(prompt => (
               <div
                 key={prompt.id}
-                onClick={() => onSelect(prompt.id)}
-                className={`group relative p-3 rounded-lg border cursor-pointer transition-all ${selectedId === prompt.id
-                  ? 'bg-arch-800 border-accent-500 shadow-md'
-                  : 'bg-arch-900 border-arch-800 hover:border-arch-600'
+                onClick={() => !isBatchMode && onSelect(prompt.id)}
+                className={`group relative p-3 rounded-lg border cursor-pointer transition-all ${batchSelected.has(prompt.id)
+                    ? 'bg-amber-950/30 border-amber-700/60'
+                    : selectedId === prompt.id
+                      ? 'bg-arch-800 border-accent-500 shadow-md'
+                      : 'bg-arch-900 border-arch-800 hover:border-arch-600'
                   }`}
               >
                 <div className="flex justify-between items-start mb-1 pr-14">
-                  <h3 className={`text-sm font-semibold line-clamp-1 ${selectedId === prompt.id ? 'text-white' : 'text-arch-200'}`}>
+                  {/* Batch checkbox */}
+                  {isBatchMode && (
+                    <input
+                      type="checkbox"
+                      checked={batchSelected.has(prompt.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setBatchSelected(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(prompt.id); else next.delete(prompt.id);
+                          return next;
+                        });
+                      }}
+                      onClick={e => e.stopPropagation()}
+                      className="accent-amber-500 mr-2 mt-0.5 shrink-0 cursor-pointer"
+                    />
+                  )}
+                  <h3 className={`text-sm font-semibold line-clamp-1 ${selectedId === prompt.id ? 'text-white' : 'text-arch-200'
+                    }`}>
                     {prompt.title}
                   </h3>
                 </div>
 
                 <div className="absolute top-3 right-3 flex space-x-1">
+                  {/* Batch toggle (appears on hover, not in batch mode) */}
+                  {!isBatchMode && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsBatchMode(true); setBatchSelected(new Set([prompt.id])); }}
+                      className="p-1 rounded-full text-arch-700 hover:text-amber-400 opacity-0 group-hover:opacity-100 transition-all"
+                      title="Selección múltiple"
+                    >
+                      <Icons.Check size={12} />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => handleAddClick(e, prompt)}
                     className={`p-1 rounded-full transition-all ${addedFeedback === prompt.id

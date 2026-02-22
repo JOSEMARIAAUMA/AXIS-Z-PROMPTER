@@ -394,6 +394,15 @@ function App() {
     }
   }, [selectedId]);
 
+  const handleBatchDelete = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    if (window.confirm(`¿Eliminar ${ids.length} prompt${ids.length > 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) {
+      setPrompts(prev => prev.filter(p => !ids.includes(p.id)));
+      if (selectedId && ids.includes(selectedId)) setSelectedId(null);
+      await Promise.all(ids.map(id => storage.deletePrompt(id)));
+    }
+  }, [selectedId]);
+
   const handleDuplicate = useCallback(async (prompt: PromptItem) => {
     const newPrompt = {
       ...prompt,
@@ -868,6 +877,7 @@ function App() {
             onSelectComposition={handleSelectComposition}
             onDeleteComposition={handleDeleteComposition}
             onDeletePrompt={handleDelete}
+            onBatchDelete={handleBatchDelete}
             onAdd={handleAdd}
             onToggleFavorite={handleToggleFavorite}
             onAddToCompiler={handleAddToCompiler}
