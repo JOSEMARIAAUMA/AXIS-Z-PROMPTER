@@ -785,6 +785,8 @@ function App() {
           <PromptEditor
             prompt={selectedPrompt}
             categories={categories}
+            areas={areas}
+            areaMapping={areaMapping}
             availableApps={areaSpecificApps}
             onSave={handleSave}
             onDelete={handleDelete}

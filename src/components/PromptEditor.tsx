@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PromptItem, CategoryMap } from '../types';
+import { PromptItem, CategoryMap, AreaInfo, AreaMapping } from '../types';
 import { Icons } from './Icon';
 import { generateTranslationAndTags, improvePrompt } from '../services/geminiService';
 import { PromptHistory } from './PromptHistory';
@@ -7,6 +7,8 @@ import { PromptHistory } from './PromptHistory';
 interface PromptEditorProps {
   prompt: PromptItem | null;
   categories: CategoryMap;
+  areas: AreaInfo[];
+  areaMapping: AreaMapping;
   availableApps: string[];
   onSave: (prompt: PromptItem) => void;
   onDelete: (id: string) => void;
@@ -14,7 +16,7 @@ interface PromptEditorProps {
 }
 
 export const PromptEditor: React.FC<PromptEditorProps> = ({
-  prompt, categories, availableApps, onSave, onDelete, onDuplicate
+  prompt, categories, areas, areaMapping, availableApps, onSave, onDelete, onDuplicate
 }) => {
   const [edited, setEdited] = useState<PromptItem | null>(null);
   const [copied, setCopied] = useState<'es' | 'en' | null>(null);
@@ -184,8 +186,8 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
           {/* Title & Category & Metadata */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-3">
               <label className="block text-xs font-medium text-arch-500 mb-1 uppercase tracking-wider">Título</label>
               <input
                 type="text"
@@ -193,6 +195,41 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 onChange={(e) => handleChange('title', e.target.value)}
                 className="w-full bg-arch-950 border border-arch-700 rounded-md p-2.5 text-white focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none text-lg font-semibold"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-arch-500 mb-1 uppercase tracking-wider">Área</label>
+              <select
+                value={edited.area || 'GLOBAL'}
+                onChange={(e) => {
+                  const newArea = e.target.value;
+                  const nextCats = (newArea && newArea !== 'GLOBAL')
+                    ? Object.keys(categories).filter(cat => areaMapping[cat]?.includes(newArea))
+                    : Object.keys(categories);
+
+                  let newCat = edited.category;
+                  let newSub = edited.subcategory || '';
+
+                  if (!nextCats.includes(newCat) && nextCats.length > 0) {
+                    newCat = nextCats[0];
+                    newSub = categories[newCat]?.[0] || '';
+                  } else if (nextCats.includes(newCat) && (!categories[newCat] || !categories[newCat].includes(newSub))) {
+                    newSub = categories[newCat]?.[0] || '';
+                  }
+
+                  setEdited(prev => prev ? {
+                    ...prev,
+                    area: newArea,
+                    category: newCat,
+                    subcategory: newSub,
+                    lastModified: Date.now()
+                  } : null);
+                }}
+                className="w-full bg-arch-950 border border-arch-700 rounded-md p-2 text-arch-200 outline-none focus:border-accent-500"
+              >
+                <option value="GLOBAL">Global (Todas)</option>
+                {areas.map(area => <option key={area.id} value={area.id}>{area.label}</option>)}
+              </select>
             </div>
 
             <div>
@@ -208,7 +245,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 }}
                 className="w-full bg-arch-950 border border-arch-700 rounded-md p-2 text-arch-200 outline-none focus:border-accent-500"
               >
-                {Object.keys(categories).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                {((edited.area && edited.area !== 'GLOBAL')
+                  ? Object.keys(categories).filter(cat => areaMapping[cat]?.includes(edited.area as string))
+                  : Object.keys(categories)).map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
             </div>
 
