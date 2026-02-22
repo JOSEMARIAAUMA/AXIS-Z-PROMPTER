@@ -1,28 +1,47 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { supabase } from '../supabaseClient';
 import { PromptItem, CompiledPrompt, LibrarySuggestion } from "../types";
 
-// Initialize Gemini Client
-// In a real app, ensure process.env.VITE_API_KEY or VITE_API_KEY is defined.
-// Vite exposes env vars prefixed with VITE_ on import.meta.env
-const apiKey = import.meta.env.VITE_API_KEY || '';
-const genAI = new GoogleGenerativeAI(apiKey);
+const withAbort = <T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> => {
+    if (!signal) return promise;
+    if (signal.aborted) return Promise.reject(new Error("AbortError"));
+
+    return new Promise<T>((resolve, reject) => {
+        const abortHandler = () => reject(new Error("AbortError"));
+        signal.addEventListener('abort', abortHandler);
+        promise.then(
+            (val) => { signal.removeEventListener('abort', abortHandler); resolve(val); },
+            (err) => { signal.removeEventListener('abort', abortHandler); reject(err); }
+        );
+    });
+};
+
+const invokeGemini = async (modelName: string, requestData: any, signal?: AbortSignal): Promise<any> => {
+    const invokePromise = supabase.functions.invoke('gemini-proxy', {
+        body: { modelName, requestData }
+    });
+    
+    const { data, error } = await withAbort(invokePromise, signal);
+    
+    if (error) {
+        throw new Error(error.message || "Error invoking gemini-proxy");
+    }
+    
+    if (!data || !data.text) {
+        throw new Error("Invalid response from gemini-proxy");
+    }
+    
+    return data.text;
+};
 
 // MODELS CONFIGURATION
 // Text & Multimodal (Vision -> Text)
-const MODEL_FAST = 'gemini-1.5-flash';
-const MODEL_REASONING = 'gemini-1.5-pro';
+const MODEL_FAST = 'gemini-2.0-flash';
+const MODEL_REASONING = 'gemini-2.5-flash';
 
 // Image Generation (Text -> Image) - Not used for analysis
 // const MODEL_IMAGE_GEN = 'gemini-pro-vision'; // Example if needed later
 
 export const enhancePrompt = async (input: string, context: string = 'General'): Promise<{ es: string, en: string }> => {
-    if (!apiKey) {
-        console.warn("API Key not found");
-        return { es: input, en: input };
-    }
-
-    const model = genAI.getGenerativeModel({ model: MODEL_FAST });
-
     const systemInstruction = `
     Act as a world-class architectural visualizer and prompt engineer (Midjourney/Stable Diffusion expert).
     Your goal is to convert colloquial descriptions into professional, structured prompts for photorealistic architectural renderings.
@@ -36,16 +55,11 @@ export const enhancePrompt = async (input: string, context: string = 'General'):
   `;
 
     try {
-        const result = await model.generateContent({
+        const text = await invokeGemini(MODEL_FAST, {
             contents: [{ role: 'user', parts: [{ text: `System: ${systemInstruction}\nContext: ${context}. User Input: ${input}` }] }],
-            generationConfig: {
-                responseMimeType: "application/json",
-            }
+            generationConfig: { responseMimeType: "application/json" }
         });
-
-        const response = await result.response;
-        const text = response.text();
-        if (!text) throw new Error("No response from AI");
+        
         return JSON.parse(text);
 
     } catch (error) {
@@ -54,36 +68,32 @@ export const enhancePrompt = async (input: string, context: string = 'General'):
     }
 };
 
-export const generateTranslationAndTags = async (text: string, sourceLang: 'es' | 'en'): Promise<{ translation: string, tagsEs: string[], tagsEn: string[] }> => {
-    if (!apiKey) {
-        console.warn("API Key not found");
-        return { translation: text, tagsEs: [], tagsEn: [] };
-    }
-
-    const model = genAI.getGenerativeModel({ model: MODEL_FAST });
+export const generateTranslationAndTags = async (text: string, sourceLang: 'es' | 'en', signal?: AbortSignal): Promise<{ translation: string, tagsEs: string[], tagsEn: string[] }> => {
     const targetLang = sourceLang === 'es' ? 'English' : 'Spanish';
     const sourceLangFull = sourceLang === 'es' ? 'Spanish' : 'English';
 
     const systemInstruction = `
-        You are an expert architectural translator and taxonomy specialist.
-        1. Translate the input text from ${sourceLangFull} to ${targetLang} accurately, maintaining architectural technical terminology.
-        2. Extract 5 to 8 relevant single-word or short-phrase tags from the content.
+        You are an expert bilingual text analyzer and taxonomy specialist.
+        1. Translate the input text from ${sourceLangFull} to ${targetLang} accurately, maintaining its professional context and specific terminology (e.g. architecture, coding, marketing, sales, general).
+        2. Extract 5 to 8 relevant single-word or short-phrase tags from the content that describe the core concepts, subjects, style, or intent.
         3. Provide these tags in BOTH Spanish and English.
-        Return JSON.
+        Return ONLY valid JSON in this exact structure:
+        {
+          "translation": "(the translated text)",
+          "tagsEs": ["etiqueta1", "etiqueta2"],
+          "tagsEn": ["tag1", "tag2"]
+        }
     `;
 
     try {
-        const result = await model.generateContent({
+        const jsonText = await invokeGemini(MODEL_FAST, {
             contents: [{ role: 'user', parts: [{ text: `System: ${systemInstruction}\nText to process: "${text}"` }] }],
-            generationConfig: {
-                responseMimeType: "application/json",
-            }
-        });
+            generationConfig: { responseMimeType: "application/json" }
+        }, signal);
 
-        const response = await result.response;
-        const jsonText = response.text();
-        if (!jsonText) throw new Error("No response");
-        return JSON.parse(jsonText);
+        // Clean markdown JSON blocks if present
+        const cleanedText = jsonText.replace(/```json\n?|```/g, '').trim();
+        return JSON.parse(cleanedText);
 
     } catch (error) {
         console.error("Gemini Translation Error", error);
@@ -92,20 +102,14 @@ export const generateTranslationAndTags = async (text: string, sourceLang: 'es' 
 };
 
 export const analyzeImage = async (base64Image: string, promptText: string): Promise<string> => {
-    if (!apiKey) return "API Key missing";
-
     // Remove data URL prefix if present for the API call
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
 
     try {
-        const model = genAI.getGenerativeModel({ model: MODEL_FAST });
-        const result = await model.generateContent([
+        return await invokeGemini(MODEL_FAST, [
             { inlineData: { mimeType: 'image/png', data: cleanBase64 } },
             { text: promptText || "Describe this image in detail for an architectural prompt. Focus on materials, lighting, vegetation, and style." }
         ]);
-
-        const response = await result.response;
-        return response.text() || "Could not analyze image.";
     } catch (error) {
         console.error("Gemini Image Analysis Error:", error);
         throw error;
@@ -113,9 +117,6 @@ export const analyzeImage = async (base64Image: string, promptText: string): Pro
 };
 
 export const suggestPrompts = async (taskDescription: string): Promise<Array<{ title: string, prompt: string }>> => {
-    if (!apiKey) return [];
-
-    const model = genAI.getGenerativeModel({ model: MODEL_FAST });
     const systemInstruction = `
         You are an assistant for an architectural studio in Andalusia.
         Suggest 3 distinct rendering prompts based on the user's task.
@@ -123,15 +124,11 @@ export const suggestPrompts = async (taskDescription: string): Promise<Array<{ t
     `;
 
     try {
-        const result = await model.generateContent({
+        const text = await invokeGemini(MODEL_FAST, {
             contents: [{ role: 'user', parts: [{ text: `System: ${systemInstruction}\nTask: ${taskDescription}` }] }],
-            generationConfig: {
-                responseMimeType: "application/json",
-            }
+            generationConfig: { responseMimeType: "application/json" }
         });
 
-        const response = await result.response;
-        const text = response.text();
         if (!text) return [];
         return JSON.parse(text);
 
@@ -142,9 +139,8 @@ export const suggestPrompts = async (taskDescription: string): Promise<Array<{ t
 };
 
 export const classifyPrompt = async (promptText: string, availableCategories: string[]): Promise<string[]> => {
-    if (!apiKey || !promptText.trim()) return [];
+    if (!promptText.trim()) return [];
 
-    const model = genAI.getGenerativeModel({ model: MODEL_FAST });
     const systemInstruction = `
         You are an AI categorizer for architectural prompts.
         1. Analyze the input prompt text.
@@ -156,15 +152,11 @@ export const classifyPrompt = async (promptText: string, availableCategories: st
     `;
 
     try {
-        const result = await model.generateContent({
+        const text = await invokeGemini(MODEL_FAST, {
             contents: [{ role: 'user', parts: [{ text: `System: ${systemInstruction}\nPrompt to analyze: "${promptText}"` }] }],
-            generationConfig: {
-                responseMimeType: "application/json",
-            }
+            generationConfig: { responseMimeType: "application/json" }
         });
 
-        const response = await result.response;
-        const text = response.text();
         if (!text) return [];
 
         const rawResult = JSON.parse(text) as string[];
@@ -180,8 +172,6 @@ export const classifyPrompt = async (promptText: string, availableCategories: st
  * Generates a FULL PromptCompiler object based on a colloquial description AND optional image.
  */
 export const generateFullCompilation = async (userInput: string, librarySummary: Partial<PromptItem>[], base64Image?: string): Promise<CompiledPrompt> => {
-    if (!apiKey) throw new Error("API Key not found");
-
     const libraryContext = librarySummary.map(p =>
         `Title: ${p.title} | Cat: ${p.category} | Tags: ${p.tags?.join(', ')}`
     ).join('\n');
@@ -206,7 +196,6 @@ export const generateFullCompilation = async (userInput: string, librarySummary:
         // Use Pro model when images are involved for better reasoning, otherwise Flash
         // Note: gemini-1.5-flash is multimodal too and often sufficient/faster
         let modelName = base64Image ? MODEL_REASONING : MODEL_FAST;
-        const model = genAI.getGenerativeModel({ model: modelName });
 
         let parts: any[] = [];
         if (base64Image) {
@@ -215,15 +204,11 @@ export const generateFullCompilation = async (userInput: string, librarySummary:
         }
         parts.push({ text: `System: ${systemInstruction}\nUser Request: "${userInput}". Create a full compilation based on this request.` });
 
-        const result = await model.generateContent({
+        const text = await invokeGemini(modelName, {
             contents: [{ role: 'user', parts: parts }],
-            generationConfig: {
-                responseMimeType: "application/json",
-            }
+            generationConfig: { responseMimeType: "application/json" }
         });
 
-        const response = await result.response;
-        const text = response.text();
         if (!text) throw new Error("No response from AI");
         return JSON.parse(text) as CompiledPrompt;
 
@@ -239,14 +224,9 @@ export const generateFullCompilation = async (userInput: string, librarySummary:
 export const analyzeCompilerAgainstLibrary = async (
     compiler: CompiledPrompt,
     library: PromptItem[],
-    availableCategories: string[]
+    availableCategories: string[],
+    signal?: AbortSignal
 ): Promise<LibrarySuggestion[]> => {
-    if (!apiKey) {
-        console.warn("API Key not found");
-        return [];
-    }
-
-    const model = genAI.getGenerativeModel({ model: MODEL_FAST });
 
     // Simplify library to save tokens
     const libraryContext = library.map(p => ({
@@ -283,15 +263,11 @@ export const analyzeCompilerAgainstLibrary = async (
     `;
 
     try {
-        const result = await model.generateContent({
+        const text = await invokeGemini(MODEL_FAST, {
             contents: [{ role: 'user', parts: [{ text: `System: ${systemInstruction}\n\nCurrent Compiled Prompt: ${compilerContent}\n\nExisting Library Summary: ${JSON.stringify(libraryContext)}` }] }],
-            generationConfig: {
-                responseMimeType: "application/json",
-            }
-        });
+            generationConfig: { responseMimeType: "application/json" }
+        }, signal);
 
-        const response = await result.response;
-        const text = response.text();
         if (!text) return [];
 
         // Add unique IDs to suggestions locally
@@ -300,14 +276,11 @@ export const analyzeCompilerAgainstLibrary = async (
 
     } catch (error) {
         console.error("Library Analysis Error:", error);
-        return [];
+        throw error;
     }
 };
 
-export const improvePrompt = async (promptText: string): Promise<string> => {
-    if (!apiKey) return promptText;
-
-    const model = genAI.getGenerativeModel({ model: MODEL_FAST });
+export const improvePrompt = async (promptText: string, signal?: AbortSignal): Promise<string> => {
     const systemInstruction = `
         You are an expert prompt engineer for architectural visualization.
         Your goal is to improve the given prompt to make it more effective for AI image generation (Midjourney/Stable Diffusion).
@@ -318,13 +291,18 @@ export const improvePrompt = async (promptText: string): Promise<string> => {
     `;
 
     try {
-        const result = await model.generateContent({
+        console.log("improvePrompt executing with input:", promptText);
+        let improvedText = await invokeGemini(MODEL_FAST, {
             contents: [{ role: 'user', parts: [{ text: `System: ${systemInstruction}\nPrompt to improve: "${promptText}"` }] }]
-        });
-        const response = await result.response;
-        return response.text() || promptText;
+        }, signal);
+        
+        if (!improvedText) improvedText = promptText;
+        // Clean markdown backticks if Gemini surrounds the response
+        improvedText = improvedText.replace(/```/g, '').trim();
+        console.log("improvePrompt success, output:", improvedText);
+        return improvedText;
     } catch (error) {
         console.error("Prompt Improvement Error", error);
-        return promptText;
+        throw error;
     }
 };

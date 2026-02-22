@@ -3,6 +3,7 @@ import { PromptItem, CategoryMap, AreaInfo, AreaMapping } from '../types';
 import { Icons } from './Icon';
 import { generateTranslationAndTags, improvePrompt } from '../services/geminiService';
 import { PromptHistory } from './PromptHistory';
+import { toast } from 'react-hot-toast';
 
 interface PromptEditorProps {
   prompt: PromptItem | null;
@@ -23,6 +24,16 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   const [isTranslating, setIsTranslating] = useState<'es' | 'en' | null>(null);
   const [isImproving, setIsImproving] = useState(false);
   const [activeTab, setActiveTab] = useState<'editor' | 'history'>('editor');
+
+  const translateAbortController = React.useRef<AbortController | null>(null);
+  const improveAbortController = React.useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      translateAbortController.current?.abort();
+      improveAbortController.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     setEdited(prompt);
@@ -69,10 +80,18 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     const sourceText = source === 'es' ? edited.contentEs : edited.contentEn;
     if (!sourceText.trim()) return;
 
+    if (isTranslating === source) {
+      // Si ya está traduciendo y se presiona (o el nuevo botón), cancelamos.
+      translateAbortController.current?.abort();
+      return;
+    }
+
     setIsTranslating(source);
+    translateAbortController.current = new AbortController();
+    const toastId = toast.loading("Traduciendo y generando etiquetas...");
 
     try {
-      const result = await generateTranslationAndTags(sourceText, source);
+      const result = await generateTranslationAndTags(sourceText, source, translateAbortController.current.signal);
 
       setEdited(prev => {
         if (!prev) return null;
@@ -85,28 +104,49 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
           lastModified: Date.now()
         };
       });
-    } catch (error) {
-      console.error("Translation failed", error);
-      alert("Error al procesar con IA. Verifica tu API Key.");
+      toast.success("Traducción completada con éxito", { id: toastId });
+    } catch (error: any) {
+      if (error.message === 'AbortError') {
+        toast.error("Traducción cancelada por el usuario", { id: toastId });
+      } else {
+        console.error("Translation failed", error);
+        toast.error("Error al procesar con IA. Verifica tu API Key o conexión.", { id: toastId });
+      }
     } finally {
       setIsTranslating(null);
+      translateAbortController.current = null;
     }
   };
 
   const handleImprove = async () => {
     if (!edited || !edited.contentEn) {
-      alert("Necesitas contenido en inglés para mejorar.");
+      toast.error("Necesitas contenido en inglés para mejorar.");
+      return;
+    }
+
+    if (isImproving) {
+      improveAbortController.current?.abort();
       return;
     }
 
     setIsImproving(true);
+    improveAbortController.current = new AbortController();
+    const toastId = toast.loading("Mejorando prompt con IA...");
+
     try {
-      const improved = await improvePrompt(edited.contentEn);
+      const improved = await improvePrompt(edited.contentEn, improveAbortController.current.signal);
       setEdited(prev => prev ? ({ ...prev, contentEn: improved, lastModified: Date.now() }) : null);
-    } catch (error) {
-      console.error("Improvement failed", error);
+      toast.success("Prompt mejorado", { id: toastId });
+    } catch (error: any) {
+      if (error.message === 'AbortError') {
+        toast.error("Mejora cancelada por el usuario", { id: toastId });
+      } else {
+        console.error("Improvement failed", error);
+        toast.error("Error al mejorar el prompt", { id: toastId });
+      }
     } finally {
       setIsImproving(false);
+      improveAbortController.current = null;
     }
   };
 
@@ -358,12 +398,12 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 </label>
                 <button
                   onClick={() => handleSmartTranslate('es')}
-                  disabled={isTranslating === 'es' || !edited.contentEs}
-                  className="flex items-center space-x-1 px-2 py-1 bg-arch-800 hover:bg-indigo-900 text-indigo-300 rounded text-[10px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50"
-                  title="Traduce al inglés y genera etiquetas automáticamente"
+                  disabled={isTranslating !== null && isTranslating !== 'es' || (!edited.contentEs && isTranslating !== 'es')}
+                  className={`flex items-center space-x-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50 ${isTranslating === 'es' ? 'bg-red-900/50 text-red-400 hover:bg-red-800/80 hover:text-white' : 'bg-arch-800 hover:bg-indigo-900 text-indigo-300'}`}
+                  title={isTranslating === 'es' ? "Cancelar traducción" : "Traduce al inglés y genera etiquetas automáticamente"}
                 >
-                  {isTranslating === 'es' ? <Icons.Refresh size={12} className="animate-spin" /> : <Icons.Languages size={12} />}
-                  <span>Traducir + Tags</span>
+                  {isTranslating === 'es' ? <Icons.X size={12} className="text-red-400" /> : <Icons.Languages size={12} />}
+                  <span>{isTranslating === 'es' ? 'Cancelar' : 'Traducir + Tags'}</span>
                 </button>
               </div>
 
@@ -393,22 +433,22 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 </label>
                 <button
                   onClick={() => handleSmartTranslate('en')}
-                  disabled={isTranslating === 'en' || !edited.contentEn}
-                  className="flex items-center space-x-1 px-2 py-1 bg-arch-800 hover:bg-indigo-900 text-indigo-300 rounded text-[10px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50"
-                  title="Traduce al español y genera etiquetas automáticamente"
+                  disabled={isTranslating !== null && isTranslating !== 'en' || (!edited.contentEn && isTranslating !== 'en')}
+                  className={`flex items-center space-x-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50 ${isTranslating === 'en' ? 'bg-red-900/50 text-red-400 hover:bg-red-800/80 hover:text-white' : 'bg-arch-800 hover:bg-indigo-900 text-indigo-300'}`}
+                  title={isTranslating === 'en' ? "Cancelar traducción" : "Traduce al español y genera etiquetas automáticamente"}
                 >
-                  {isTranslating === 'en' ? <Icons.Refresh size={12} className="animate-spin" /> : <Icons.Languages size={12} />}
-                  <span>Traducir + Tags</span>
+                  {isTranslating === 'en' ? <Icons.X size={12} className="text-red-400" /> : <Icons.Languages size={12} />}
+                  <span>{isTranslating === 'en' ? 'Cancelar' : 'Traducir + Tags'}</span>
                 </button>
 
                 <button
                   onClick={handleImprove}
-                  disabled={isImproving || !edited.contentEn}
-                  className="flex items-center space-x-1 px-2 py-1 bg-arch-800 hover:bg-purple-900 text-purple-300 rounded text-[10px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50"
-                  title="Mejora el prompt usando IA avanzada"
+                  disabled={isTranslating !== null || (!edited.contentEn && !isImproving)}
+                  className={`flex items-center space-x-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50 ${isImproving ? 'bg-red-900/50 text-red-400 hover:bg-red-800/80 hover:text-white' : 'bg-arch-800 hover:bg-purple-900 text-purple-300'}`}
+                  title={isImproving ? "Cancelar mejora" : "Mejora el prompt usando IA avanzada"}
                 >
-                  {isImproving ? <Icons.Refresh size={12} className="animate-spin" /> : <Icons.Sparkles size={12} />}
-                  <span>Mejorar Prompt</span>
+                  {isImproving ? <Icons.X size={12} className="text-red-400" /> : <Icons.Sparkles size={12} />}
+                  <span>{isImproving ? 'Cancelar M.' : 'Mejorar Prompt'}</span>
                 </button>
               </div>
 

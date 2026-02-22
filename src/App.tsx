@@ -13,6 +13,7 @@ import { Icons } from './components/Icon';
 import * as storage from './services/supabaseStorageService';
 // Also import local service temporarily for migration capability
 import * as localStorageFromService from './services/storageService';
+import { Toaster } from 'react-hot-toast';
 import { PromptItem, AppSettings, FilterState, CompiledPrompt, CategoryMap, SavedComposition, LibrarySuggestion, AreaType, AreaMapping } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { DEFAULT_AREAS, getAreaConfig, INITIAL_PANEL_WIDTHS, AREA_CATEGORIES } from './constants';
@@ -800,6 +801,15 @@ function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-arch-950 font-sans text-arch-100">
+      <Toaster position="bottom-right" toastOptions={{
+        style: {
+          background: '#1F2937',
+          color: '#fff',
+          border: '1px solid #374151'
+        },
+        success: { iconTheme: { primary: '#10B981', secondary: '#fff' } },
+        error: { iconTheme: { primary: '#EF4444', secondary: '#fff' }, duration: 5000 }
+      }} />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel: Filter & List */}

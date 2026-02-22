@@ -4,6 +4,7 @@ import { Icons } from './Icon';
 import { classifyPrompt, analyzeCompilerAgainstLibrary } from '../services/geminiService';
 import { TechParamsModal } from './TechParamsModal';
 import { getAreaConfig } from '../constants';
+import { toast } from 'react-hot-toast';
 
 interface PromptCompilerProps {
     compiler: CompiledPrompt;
@@ -43,6 +44,14 @@ export const PromptCompiler: React.FC<PromptCompilerProps> = ({
     // Smart Sync State
     const [isSyncing, setIsSyncing] = useState(false);
     const [suggestions, setSuggestions] = useState<LibrarySuggestion[]>([]);
+
+    const syncAbortController = React.useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        return () => {
+            syncAbortController.current?.abort();
+        };
+    }, []);
 
     // New Compilation Flow State
     const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -114,19 +123,35 @@ export const PromptCompiler: React.FC<PromptCompilerProps> = ({
     const handleSmartSync = async () => {
         if (!fullPrompt.trim() || fullPrompt.length < 20) return;
 
+        if (isSyncing) {
+            syncAbortController.current?.abort();
+            return;
+        }
+
         setIsSyncing(true);
         setSuggestions([]);
+        syncAbortController.current = new AbortController();
+        const toastId = toast.loading("Analizando contra tu biblioteca...");
 
         try {
-            const results = await analyzeCompilerAgainstLibrary(compiler, library, Object.keys(availableCategories));
+            const results = await analyzeCompilerAgainstLibrary(compiler, library, Object.keys(availableCategories), syncAbortController.current.signal);
             setSuggestions(results);
             if (results.length > 0) {
                 setCollapsedSections(prev => ({ ...prev, suggestions: false })); // Auto open
+                toast.success(`Se encontraron ${results.length} coincidencias/sugerencias`, { id: toastId });
+            } else {
+                toast.success("No se encontraron sugerencias nuevas de mejora", { id: toastId, icon: "ℹ️" });
             }
-        } catch (e) {
-            console.error(e);
+        } catch (error: any) {
+            if (error.message === 'AbortError') {
+                toast.error("Análisis cancelado por el usuario", { id: toastId });
+            } else {
+                console.error(error);
+                toast.error("Error al analizar la biblioteca", { id: toastId });
+            }
         } finally {
             setIsSyncing(false);
+            syncAbortController.current = null;
         }
     };
 
@@ -431,12 +456,11 @@ export const PromptCompiler: React.FC<PromptCompilerProps> = ({
                     {/* Smart Sync Button */}
                     <button
                         onClick={handleSmartSync}
-                        disabled={isSyncing}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-900/30 border border-indigo-700 text-indigo-300 hover:bg-indigo-900/50 hover:text-white rounded text-xs font-medium transition-colors"
-                        title="Analizar y Guardar Mejoras en Biblioteca"
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${isSyncing ? 'bg-red-900/50 border border-red-700 text-red-400 hover:bg-red-900 hover:text-white' : 'bg-indigo-900/30 border border-indigo-700 text-indigo-300 hover:bg-indigo-900/50 hover:text-white'}`}
+                        title={isSyncing ? "Cancelar Análisis" : "Analizar y Guardar Mejoras en Biblioteca"}
                     >
-                        <Icons.Refresh size={14} className={isSyncing ? "animate-spin" : ""} />
-                        <span className="hidden sm:inline">{isSyncing ? 'Analizando...' : 'Smart Sync'}</span>
+                        {isSyncing ? <Icons.X size={14} className="text-red-400" /> : <Icons.Refresh size={14} />}
+                        <span className="hidden sm:inline">{isSyncing ? 'Cancelar' : 'Smart Sync'}</span>
                     </button>
 
                     {/* New Compilation Button */}

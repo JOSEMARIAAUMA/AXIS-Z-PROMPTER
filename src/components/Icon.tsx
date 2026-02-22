@@ -29,6 +29,7 @@ export const Icons = {
   Image: ImageIcon,
   Upload,
   Close: X,
+  X,
   More: MoreVertical,
   Refresh: RefreshCw,
   Star,
