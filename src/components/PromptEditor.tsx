@@ -266,7 +266,8 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
           </div>
 
           {/* Origin & Rating */}
-          <div className="flex items-center space-x-6 bg-arch-950/30 p-3 rounded-lg border border-arch-800/50">
+          <div className="flex items-start space-x-6 bg-arch-950/30 p-3 rounded-lg border border-arch-800/50">
+            {/* Origen: tipo de fuente (WEB o USER) — se puede cambiar con click */}
             <div>
               <label className="block text-[10px] font-medium text-arch-500 mb-1 uppercase tracking-wider">Origen</label>
               <button
@@ -274,20 +275,39 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                   const nextOrigin = edited.origin === 'user' ? 'internet' : 'user';
                   handleChange('origin', nextOrigin);
                 }}
-                className={`flex items-center space-x-2 px-2 py-1 rounded border transition-colors ${edited.origin === 'internet'
+                className={`flex items-center space-x-1.5 px-2 py-1 rounded border transition-colors ${edited.origin === 'internet'
                   ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20'
                   : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
                   }`}
               >
-                {edited.origin === 'internet' ? <Icons.Globe size={14} /> : <Icons.User size={14} />}
-                <span className="text-[10px] font-medium uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-                  {edited.creatorName
-                    ? (edited.editorName && edited.editorName !== edited.creatorName
-                      ? `${edited.creatorName} → ${edited.editorName}`
-                      : edited.creatorName)
-                    : (edited.origin === 'internet' ? 'Web' : 'User')}
+                {edited.origin === 'internet' ? <Icons.Globe size={12} /> : <Icons.User size={12} />}
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {edited.origin === 'internet' ? 'Web' : 'User'}
                 </span>
               </button>
+            </div>
+
+            {/* Autoría: quién lo creó y quién lo editó — independiente del tipo de origen */}
+            <div className="flex flex-col space-y-1 min-w-0">
+              <label className="block text-[10px] font-medium text-arch-500 uppercase tracking-wider">Autoría</label>
+              {edited.creatorName ? (
+                <div className="flex flex-col space-y-0.5">
+                  <div className="flex items-center space-x-1">
+                    <Icons.User size={9} className="text-arch-500 shrink-0" />
+                    <span className="text-[9px] text-arch-400 uppercase tracking-tight">Creado:</span>
+                    <span className="text-[10px] font-semibold text-arch-200 truncate">{edited.creatorName}</span>
+                  </div>
+                  {edited.editorName && edited.editorName !== edited.creatorName && (
+                    <div className="flex items-center space-x-1">
+                      <Icons.Edit size={9} className="text-accent-500 shrink-0" />
+                      <span className="text-[9px] text-arch-400 uppercase tracking-tight">Editado:</span>
+                      <span className="text-[10px] font-semibold text-accent-400 truncate">{edited.editorName}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span className="text-[9px] text-arch-600 italic">Sin registro</span>
+              )}
             </div>
 
             <div>
